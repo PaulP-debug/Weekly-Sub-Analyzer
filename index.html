@@ -101,7 +101,6 @@
 function trimLines(s){ return s.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(l=>l.length>0); }
 function splitSmart(line){
   if(line.includes('\t')) return line.split('\t').map(x=>x.trim());
-  // fallback CSV-like (simple)
   const out=[]; let cur=''; let inQ=false;
   for(let i=0;i<line.length;i++){ const ch=line[i];
     if(ch === '"'){ if(inQ && i+1<line.length && line[i+1]==='"'){ cur+='"'; i++; continue; } inQ=!inQ; continue; }
@@ -123,74 +122,32 @@ function parseDateFlexible(s){
 function fmt(dt){ if(!dt) return '-'; const y=dt.getFullYear(); const m=String(dt.getMonth()+1).padStart(2,'0'); const d=String(dt.getDate()).padStart(2,'0'); const hh=String(dt.getHours()).padStart(2,'0'); const mm=String(dt.getMinutes()).padStart(2,'0'); const ss=String(dt.getSeconds()).padStart(2,'0'); return `${y}-${m}-${d} ${hh}:${mm}:${ss}`; }
 
 /* ----------------- Purchases parser (4-line groups) ----------------- */
-/*
-  Expected per record:
-   Line A: Status
-   Line B: Updated<TAB>AppOrderId<TAB>OrderNo<TAB>Channel<TAB>PurchaseID
-   Line C: Purchase Type
-   Line D: Amount
-  But lines might be merged or broken; this function tries to robustly detect groups.
-*/
 let PURCHASES = { headers:[], rows:[] };
-
 function stitchPurchasesLines(lines){
-  // lines: array of trimmed non-empty lines
   const groups = [];
-  // attempt to find header row at top
   let i = 0;
-  let headerDetected = false;
-  if(lines.length && lines[0].toLowerCase().includes('status') && lines[0].toLowerCase().includes('amount')){
-    headerDetected = true;
-    i = 1;
-  }
+  if(lines.length && lines[0].toLowerCase().includes('status') && lines[0].toLowerCase().includes('amount')){ i = 1; }
   while(i < lines.length){
-    // We expect 4 logical lines per record, but some may be merged.
-    // Strategy: if current line contains a datetime (YYYY-MM-DD) treat as "line B" possibly preceded by status.
-    // else if it contains 'sub_pack' or 'start_pack' treat as purchaseType line.
-    // Build small buffer until we have status, lineB, purchaseType, amount.
     let status = null, lineB = null, ptype = null, amount = null;
-    // 1) status may be the current line if it isn't a long tabbed line or numeric amount
-    // examine next up to 6 raw lines to assemble a record
     const buffer = [];
-    for(let j=0;j<6 && (i+j)<lines.length; j++){
-      buffer.push(lines[i+j]);
-    }
-    // Now parse buffer heuristically
-    // Find index of first buffer element that looks like tabbed line with a date (Updated)
+    for(let j=0;j<6 && (i+j)<lines.length; j++){ buffer.push(lines[i+j]); }
     let idxLineB = -1;
-    for(let k=0;k<buffer.length;k++){
-      if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].includes('\t')){ idxLineB = k; break; }
-    }
-    if(idxLineB === -1){
-      // maybe merged: look for date even if no tab
-      for(let k=0;k<buffer.length;k++){
-        if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].split(/\s+/).length>2){ idxLineB = k; break; }
-      }
-    }
-    // find purchaseType index (sub_pack/etc)
+    for(let k=0;k<buffer.length;k++){ if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].includes('\t')){ idxLineB = k; break; } }
+    if(idxLineB === -1){ for(let k=0;k<buffer.length;k++){ if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].split(/\s+/).length>2){ idxLineB = k; break; } } }
     let idxType = buffer.findIndex(b=>/\b(sub_pack|start_pack|default)\b/i.test(b));
-    // find amount index (looks like number with decimal)
     let idxAmt = buffer.findIndex(b=>/^\d+(\.\d+)?$/.test(b));
-    // Strategy to assign:
     if(idxLineB >= 0){
-      // status likely at index idxLineB-1 if present
       if(idxLineB-1 >= 0) status = buffer[idxLineB-1];
       lineB = buffer[idxLineB];
       if(idxType > idxLineB) ptype = buffer[idxType];
       if(idxAmt > idxLineB) amount = buffer[idxAmt];
-      // construct consumed count
-      // consumed = index of last used + 1
       let lastUsed = Math.max(idxLineB, idxType, idxAmt);
       if(lastUsed < 0) lastUsed = idxLineB;
       const consumed = Math.max(1, lastUsed+1);
-      // push record
       groups.push({status:status||'', lineB:lineB||'', ptype:ptype||'', amount:amount||''});
       i += consumed;
     } else if(idxType >= 0 && idxAmt >= 0){
-      // maybe lineB and status are missing; assume previous line is lineB
-      // fallback: use sequence status?lineB?ptype?amount
       status = buffer[0];
-      // try to extract a date from any buffer item to be updated
       let candidateLineB = buffer.find(b=>/\d{4}-\d{2}-\d{2}/.test(b));
       lineB = candidateLineB || buffer[1] || '';
       ptype = buffer[idxType];
@@ -199,27 +156,20 @@ function stitchPurchasesLines(lines){
       groups.push({status, lineB, ptype, amount});
       i += lastUsed+1;
     } else {
-      // if none matched, try to consume one line as status and continue
-      // Avoid infinite loop: consume 1
       groups.push({status:buffer[0]||'', lineB:'', ptype:'', amount:''});
       i += 1;
     }
   }
   return groups;
 }
-
 function convertPurchases(){
   const raw = document.getElementById('rawPurchases').value || '';
   const lines = trimLines(raw);
   if(lines.length===0){ alert('Paste Purchases Data first'); return; }
-  // stitch into groups
   const groups = stitchPurchasesLines(lines);
-
-  // map into table rows with locked headers
   const headers = ['Status','Updated','App Order Id','Order No','Channel','Purchase ID','Purchase Type','Amount'];
   const rows = [];
   groups.forEach(g=>{
-    // split lineB into parts
     const parts = splitSmart(g.lineB);
     const updated = parts[0] || '';
     const appOrderId = parts[1] || '';
@@ -237,48 +187,27 @@ function convertPurchases(){
       'Amount': g.amount||''
     });
   });
-
   PURCHASES = { headers, rows };
   renderEditableTable('purchasesTableWrap', PURCHASES, 'purch');
   document.getElementById('purchasesTableWrap').style.display='block';
 }
 
 /* ----------------- Game Flow parser (3-line groups) ----------------- */
-/*
- Expected:
-  Line 1: 6 numeric fields (tabbed)
-  Line 2: Reason (Weekly Subscription)
-  Line 3: Note1 Note2 CreatingTime (tabbed)
-*/
 let FLOW = { headers:[], rows:[] };
-
 function stitchFlowLines(lines){
-  // Build records robustly
-  const recs = [];
-  // remove leading header if present
-  let i = 0;
+  const recs = []; let i = 0;
   if(lines.length && lines[0].toLowerCase().includes('played') && lines[0].toLowerCase().includes('creating')) i = 1;
   while(i < lines.length){
-    // If line has >=6 tab fields, treat as line1
     let line1 = null, line2 = null, line3 = null;
     let part = splitSmart(lines[i]);
     if(part.length >= 6){
       line1 = lines[i];
-      // next line is reason (if exists)
       if(i+1 < lines.length) line2 = lines[i+1];
       if(i+2 < lines.length) line3 = lines[i+2];
-      // If line3 doesn't contain date-like pattern, perhaps lines fused — attempt to find date token further
-      // If line3 missing or doesn't contain date, try to merge subsequent lines until date found
       if(!line3 || !(/\d{4}-\d{2}-\d{2}/.test(line3))){
-        let j = i+2;
-        let accumulated = '';
-        while(j < lines.length && !(/\d{4}-\d{2}-\d{2}/.test(accumulated))){
-          accumulated += (accumulated ? '\t' : '') + lines[j];
-          j++;
-          if(/\d{4}-\d{2}-\d{2}/.test(accumulated)) break;
-        }
+        let j = i+2; let accumulated = '';
+        while(j < lines.length && !(/\d{4}-\d{2}-\d{2}/.test(accumulated))){ accumulated += (accumulated ? '\t' : '') + lines[j]; j++; if(/\d{4}-\d{2}-\d{2}/.test(accumulated)) break; }
         if(accumulated) line3 = accumulated;
-        // consumed lines = j-i
         recs.push({line1, line2: line2||'', line3: line3||''});
         i = j;
       } else {
@@ -286,30 +215,15 @@ function stitchFlowLines(lines){
         i += 3;
       }
     } else {
-      // If current line doesn't contain 6 fields, maybe it's merged into previous; attempt to combine with next two lines
-      // Find next line that has date
-      // fallback: consume one to avoid infinite loop
-      // Attempt to find a group of three by scanning ahead
       let candidate = [];
       for(let j=i;j<Math.min(lines.length,i+6);j++) candidate.push(lines[j]);
-      // attempt to assemble first 6-fields piece
       let foundIndex = -1;
-      for(let k=0;k<candidate.length;k++){
-        if(splitSmart(candidate[k]).length >=6){ foundIndex = k; break; }
-      }
-      if(foundIndex >= 0){
-        // assume group starts at i+foundIndex
-        i = i + foundIndex;
-        continue;
-      } else {
-        // give up: consume one
-        i++;
-      }
+      for(let k=0;k<candidate.length;k++){ if(splitSmart(candidate[k]).length >=6){ foundIndex = k; break; } }
+      if(foundIndex >= 0){ i = i + foundIndex; continue; } else { i++; }
     }
   }
   return recs;
 }
-
 function convertFlow(){
   const raw = document.getElementById('rawFlow').value || '';
   const lines = trimLines(raw);
@@ -322,7 +236,6 @@ function convertFlow(){
     const c = splitSmart(g.line3);
     while(a.length<6) a.push('');
     while(c.length<3) c.push('');
-    // find date-like token in c (last)
     let ct = '';
     for(let j=c.length-1;j>=0;j--){ if(/\d{4}-\d{2}-\d{2}/.test(c[j])||/^\d{10,}$/.test(c[j])){ ct = c[j]; break; } }
     if(!ct) ct = c[c.length-1]||'';
@@ -339,7 +252,6 @@ function convertFlow(){
       'Creating Time': ct
     });
   });
-
   FLOW = { headers, rows };
   renderEditableTable('flowTableWrap', FLOW, 'flow');
   document.getElementById('flowTableWrap').style.display='block';
@@ -364,7 +276,6 @@ function renderEditableTable(containerId, data, prefix){
   html += `<div style="margin-top:8px"><button class="btn btn-ghost" onclick="saveEdits('${containerId}','${prefix}')">Save Edits</button></div>`;
   wrap.innerHTML = html;
 }
-
 function saveEdits(containerId, prefix){
   const wrap = document.getElementById(containerId); const table = wrap.querySelector('table'); if(!table) return;
   const headers = (prefix==='purch') ? PURCHASES.headers : FLOW.headers;
@@ -391,7 +302,6 @@ function addDays(dt, days){ const o=new Date(dt.getTime()); o.setDate(o.getDate(
 function startMidnight(dt){ const s=new Date(dt.getTime()); s.setHours(0,0,0,0); return s; }
 function adjustClaimForReset(d){ const a=new Date(d.getTime()); if(a.getHours()<8) a.setDate(a.getDate()-1); a.setHours(0,0,0,0); return a; }
 
-/* Compute intervals with stacking/extending */
 function computeIntervals(purchases){
   const byType={};
   purchases.forEach(p=>{ if(!byType[p.type]) byType[p.type]=[]; byType[p.type].push(p); });
@@ -414,7 +324,6 @@ function computeIntervals(purchases){
   return out;
 }
 
-/* Map claims to intervals day-by-day */
 function matchClaimsToIntervals(intervalsByType, claims){
   const result={};
   Object.keys(intervalsByType).forEach(type=>{
@@ -439,11 +348,8 @@ function matchClaimsToIntervals(intervalsByType, claims){
 
 /* ----------------- Main Analyze entry ----------------- */
 function analyzeFromTables(){
-  // PURCHASES -> parse rows from PURCHASES (if not present try to convert)
   if(!PURCHASES.rows || PURCHASES.rows.length===0){ if(trimLines(document.getElementById('rawPurchases').value||'').length) convertPurchases(); else return alert('No Purchases Data. Paste and Convert first.'); }
   if(!FLOW.rows || FLOW.rows.length===0){ if(trimLines(document.getElementById('rawFlow').value||'').length) convertFlow(); else return alert('No Game Flow Data. Paste and Convert first.'); }
-
-  // Map purchases
   const headers1 = PURCHASES.headers; const rows1 = PURCHASES.rows;
   const findKey = (hdrs,key) => hdrs.find(h=>h.trim().toLowerCase()===key.toLowerCase()) || null;
   const H_STATUS = findKey(headers1,'Status'); const H_UPDATED = findKey(headers1,'Updated'); const H_PURCHASE_TYPE = findKey(headers1,'Purchase Type') || findKey(headers1,'PurchaseType')||findKey(headers1,'purchase_type'); const H_AMOUNT = findKey(headers1,'Amount');
@@ -457,16 +363,12 @@ function analyzeFromTables(){
     purchases.push({ type, updated: d, amount: Number(stripNumber(r[H_AMOUNT])), raw: r });
   });
   const intervalsByType = computeIntervals(purchases);
-
-  // Map claims
   const headers2 = FLOW.headers; const rows2 = FLOW.rows;
   const find2 = key => headers2.find(h=>h.trim().toLowerCase()===key.toLowerCase()) || headers2.find(h=>h.toLowerCase().includes(key.toLowerCase()));
   const H_UNPLAYED = find2('Unplayed SC') || find2('unplayed');
   const H_GC = find2('GC') || find2('gc');
   const H_CREATING = find2('Creating Time') || find2('creating') || find2('created') || find2('time') || find2('timestamp');
-  if(!H_UNPLAYED || !H_GC || !H_CREATING){
-    if(!confirm('Game Flow table missing Unplayed SC / GC / Creating Time. Continue with empty claims?')) return;
-  }
+  if(!H_UNPLAYED || !H_GC || !H_CREATING){ if(!confirm('Game Flow table missing Unplayed SC / GC / Creating Time. Continue with empty claims?')) return; }
   const claims = [];
   rows2.forEach(r=>{
     const unp = H_UNPLAYED ? r[H_UNPLAYED] : r['Unplayed SC'] || '';
@@ -483,12 +385,10 @@ function analyzeFromTables(){
 /* ----------------- Render final UI ----------------- */
 function renderFinal(intervalsByType, mapping){
   const out = document.getElementById('results'); let html='';
-  // Summary
   let totalIntervals = 0; ['Bronze','Silver','Gold'].forEach(t=>{ totalIntervals += (intervalsByType[t]||[]).length; });
   html += `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px"><div style="background:#fff;padding:10px;border-radius:8px;border:1px solid #eee;min-width:160px"><div class="small-muted">Total intervals</div><div style="font-weight:800;font-size:18px;margin-top:6px">${totalIntervals}</div></div>`;
   ['Bronze','Silver','Gold'].forEach(t=>{ html += `<div style="background:#fff;padding:10px;border-radius:8px;border:1px solid #eee;min-width:140px"><div class="small-muted">${t}</div><div style="font-weight:800;font-size:18px;margin-top:6px">${(intervalsByType[t]||[]).length}</div></div>`; });
   html += `</div>`;
-
   const now = new Date();
   ['Bronze','Silver','Gold'].forEach(type=>{
     const intervals = intervalsByType[type] || [];
@@ -497,7 +397,7 @@ function renderFinal(intervalsByType, mapping){
     if(intervals.length === 0){ html += `<div class="small-muted" style="margin-top:10px">No intervals.</div></div>`; return; }
     intervals.forEach((iv,idx)=>{
       const days = []; const sMid = startMidnight(iv.start);
-      for(let i=0;i<7;i++){ const d=new Date(sMid.getTime()); d.setDate(d.getDate()+i); days.push({dayIndex:i,dateLabel:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`, claimTimes:[], claimed:false}); }
+      for(let i=0;i<7;i++){ const dd=new Date(sMid.getTime()); dd.setDate(dd.getDate()+i); days.push({dayIndex:i,dateLabel:`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`, claimTimes:[], claimed:false}); }
       const mapped = (mapping[type] && mapping[type][idx]) ? mapping[type][idx].days : null;
       if(mapped && mapped.length===7){ for(let i=0;i<7;i++){ days[i].claimed = mapped[i].claimed; days[i].claimTimes = mapped[i].claimTimes.slice(); } }
       html += `<div style="margin-top:12px"><strong>Interval ${idx+1}</strong> — ${escapeHtml(fmt(iv.start))} → ${escapeHtml(fmt(iv.end))} (purchases: ${iv.purchases.length})</div>`;
@@ -529,40 +429,18 @@ function renderFinal(intervalsByType, mapping){
     });
     html += `</div>`;
   });
-
-  // export buttons
   html += `<div style="margin-top:14px;display:flex;gap:8px;align-items:center"><button class="export-btn" onclick="exportIntervals()">Export Intervals CSV</button><button class="export-btn" onclick="exportClaims()">Export Claims CSV</button><div class="small-muted" style="margin-left:8px">Exports follow current analysis.</div></div>`;
-
   out.innerHTML = html;
   window.__LAST_COMPUTED = { intervalsByType, mapping };
   out.scrollIntoView({behavior:'smooth'});
 }
-
-/* Toggle details */
-function toggleDetails(id, btn){
-  const el = document.getElementById(id); if(!el) return;
-  const open = el.classList.toggle('open'); btn.innerText = open ? 'Hide Details ▲' : 'Show Details ▼';
-}
-
-/* ----------------- CSV export ----------------- */
-function toCSV(rows, headers){ const esc=v=>{ if(v===null||v===undefined) return ''; const s=String(v); if(s.includes('"')||s.includes(',')||s.includes('\n')) return `"${s.replace(/"/g,'""')}"`; return s; }; let lines=[headers.map(esc).join(',')]; rows.forEach(r=>lines.push(headers.map(h=>esc(r[h])).join(','))); return lines.join('\n'); }
+function toggleDetails(id, btn){ const el = document.getElementById(id); if(!el) return; const open = el.classList.toggle('open'); btn.innerText = open ? 'Hide Details ▲' : 'Show Details ▼'; }
+function toCSV(rows, headers){ const esc=v=>{ if(v===null||v===undefined) return ''; const s=String(v); if(s.includes('"')||s.includes(',')||s.includes('\n')) return `\"${s.replace(/\"/g,'\"\"')}\"`; return s; }; let lines=[headers.map(esc).join(',')]; rows.forEach(r=>lines.push(headers.map(h=>esc(r[h])).join(','))); return lines.join('\n'); }
 function downloadFile(filename, text){ const blob=new Blob([text], { type: 'text/csv;charset=utf-8;' }); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },500); }
-
-function exportIntervals(){
-  const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.intervalsByType).forEach(type=>{ data.intervalsByType[type].forEach((iv,idx)=>{ const purchases = iv.purchases.map(p => (p.raw && (p.raw['Purchase ID']||p.raw['PurchaseID']||'')) || '').join('|'); const amt = iv.purchases.reduce((s,p)=>s+(Number(p.amount)||0),0); rows.push({ subscription_type:type, interval_index: idx+1, start: fmt(iv.start), end: fmt(iv.end), purchases_count: iv.purchases.length, amount_sum: amt.toFixed(2), purchase_ids: purchases }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','start','end','purchases_count','amount_sum','purchase_ids']); downloadFile('intervals.csv', csv);
-}
-
-function exportClaims(){
-  const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.mapping).forEach(type=>{ (data.mapping[type]||[]).forEach((m, idx)=>{ (m.days||[]).forEach(d=>{ rows.push({ subscription_type:type, interval_index: idx+1, day_index: d.dayIndex+1, date_label: d.dateLabel, claimed: d.claimed ? 'Yes' : 'No', claim_times: (d.claimTimes||[]).map(ct=>fmt(ct)).join('|') }); }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','day_index','date_label','claimed','claim_times']); downloadFile('claims.csv', csv);
-}
-
-/* ----------------- Helpers ----------------- */
+function exportIntervals(){ const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.intervalsByType).forEach(type=>{ data.intervalsByType[type].forEach((iv,idx)=>{ const purchases = iv.purchases.map(p => (p.raw && (p.raw['Purchase ID']||p.raw['PurchaseID']||'')) || '').join('|'); const amt = iv.purchases.reduce((s,p)=>s+(Number(p.amount)||0),0); rows.push({ subscription_type:type, interval_index: idx+1, start: fmt(iv.start), end: fmt(iv.end), purchases_count: iv.purchases.length, amount_sum: amt.toFixed(2), purchase_ids: purchases }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','start','end','purchases_count','amount_sum','purchase_ids']); downloadFile('intervals.csv', csv); }
+function exportClaims(){ const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.mapping).forEach(type=>{ (data.mapping[type]||[]).forEach((m, idx)=>{ (m.days||[]).forEach(d=>{ rows.push({ subscription_type:type, interval_index: idx+1, day_index: d.dayIndex+1, date_label: d.dateLabel, claimed: d.claimed ? 'Yes' : 'No', claim_times: (d.claimTimes||[]).map(ct=>fmt(ct)).join('|') }); }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','day_index','date_label','claimed','claim_times']); downloadFile('claims.csv', csv); }
 function previewRaw(){ document.getElementById('results').innerHTML = `<pre style="max-height:380px;overflow:auto">${escapeHtml(JSON.stringify({purchases:PURCHASES,flow:FLOW},null,2))}</pre>`; }
-
-/* expose for console testing */
 window.__internal = { stitchPurchasesLines, stitchFlowLines, PURCHASES, FLOW };
-
-/* end */
 </script>
 </body>
 </html>
