@@ -1,0 +1,90 @@
+import streamlit as st
+import pandas as pd
+from io import StringIO
+
+st.set_page_config(page_title="Weekly Subscription Analyzer", layout="wide")
+
+st.title("📊 Weekly Subscription Analyzer")
+st.write("Paste your tables below. Make sure the headers are included exactly as required.")
+
+# Expected Headers
+EXPECTED_BOX1_HEADERS = [
+    "Status", "Updated", "App Order Id", "Order No",
+    "Channel", "Purchase ID", "Purchase Type", "Amount"
+]
+
+EXPECTED_BOX2_HEADERS = [
+    "Played SC", "Unplayed SC", "GC", "Current Played SC",
+    "Current Unplayed SC", "Current Chips", "Reason",
+    "Note1", "Note2", "Creating Time"
+]
+
+
+def parse_table(text: str):
+    """
+    Converts pasted text into a DataFrame.
+    Compatible with GitHub, Streamlit Cloud, and local execution.
+    """
+    return pd.read_csv(StringIO(text))
+
+
+def validate_columns(df: pd.DataFrame, expected_headers: list):
+    """
+    Validates whether a DataFrame has the exact expected headers.
+    """
+    return list(df.columns) == expected_headers
+
+
+# ----------------------------
+# BOX 1
+# ----------------------------
+st.subheader("📥 Box 1 — Subscription Payment Data (8 Columns)")
+st.caption("Headers required: " + ", ".join(EXPECTED_BOX1_HEADERS))
+
+box1_text = st.text_area("Paste Box 1 Data Here", height=200)
+df1 = None
+
+if box1_text.strip():
+    try:
+        df1 = parse_table(box1_text)
+        st.success("Box 1 loaded successfully!")
+
+        if not validate_columns(df1, EXPECTED_BOX1_HEADERS):
+            st.error(f"❌ Column mismatch.\nExpected:\n{EXPECTED_BOX1_HEADERS}")
+        else:
+            st.dataframe(df1, use_container_width=True)
+
+    except Exception as err:
+        st.error(f"Failed to parse Box 1 data: {err}")
+
+
+# ----------------------------
+# BOX 2
+# ----------------------------
+st.subheader("📥 Box 2 — Chips / SC Data (10 Columns)")
+st.caption("Headers required: " + ", ".join(EXPECTED_BOX2_HEADERS))
+
+box2_text = st.text_area("Paste Box 2 Data Here", height=200)
+df2 = None
+
+if box2_text.strip():
+    try:
+        df2 = parse_table(box2_text)
+        st.success("Box 2 loaded successfully!")
+
+        if not validate_columns(df2, EXPECTED_BOX2_HEADERS):
+            st.error(f"❌ Column mismatch.\nExpected:\n{EXPECTED_BOX2_HEADERS}")
+        else:
+            st.dataframe(df2, use_container_width=True)
+
+    except Exception as err:
+        st.error(f"Failed to parse Box 2 data: {err}")
+
+
+# ----------------------------
+# Ready for Analysis Section
+# ----------------------------
+if df1 is not None and df2 is not None:
+    st.markdown("---")
+    st.subheader("✨ Ready for Analysis")
+    st.write("Both tables loaded successfully. Tell me what analysis you want to add next.")
