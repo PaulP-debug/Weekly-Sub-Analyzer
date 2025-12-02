@@ -7,7 +7,7 @@
 <style>
  body { font-family: Arial, sans-serif; padding: 20px; }
  h2 { margin-top: 30px; }
- textarea { width: 100%; height: 180px; font-family: monospace; }
+ textarea { width: 100%; height: 180px; font-family: monospace; margin-top: 5px; }
  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
  th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
  .bronze { background: #cd7f32; color: white; }
@@ -23,10 +23,10 @@
 <body>
 <h1>Weekly Subscription Analyzer</h1>
 
-<h2>Purchases Data (Box 1)</h2>
+<h2>Purchases Data</h2>
 <textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
 
-<h2>Game Flow Data (Box 2)</h2>
+<h2>Game Flow Data</h2>
 <textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
 
 <button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
@@ -36,13 +36,8 @@
 
 <script>
 function parseTS(x){
-    let t = x.trim().replace(/\s+/, 'T');
-    let d = new Date(t);
+    let d = new Date(x.trim().replace(/\s+/, 'T'));
     if(isNaN(d)) return null;
-    // Apply 08:00 cutoff for determining the “day” in grid
-    if(d.getHours() < 8){
-        d.setDate(d.getDate() - 1);
-    }
     return d;
 }
 
@@ -95,8 +90,8 @@ function analyze(){
         if(parseFloat(line1[1])===5.5 && parseFloat(line1[2])===40000) tier='Gold';
     }
     if(!tier) continue;
-    let date = new Date(ts.trim());
-    if(isNaN(date)) continue;
+    let date = parseTS(ts);
+    if(!date) continue;
     claims.push({tier, ts: date});
  }
 
