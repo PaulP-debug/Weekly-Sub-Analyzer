@@ -18,6 +18,7 @@
  .claimed { background: #c6efce; }
  .missed { background: #ffc7ce; }
  .future { background: #d9d9d9; }
+ .extended { background: #ffeb9c; }
 </style>
 </head>
 <body>
@@ -36,91 +37,91 @@
 
 <script>
 function parseTS(x){
-    return new Date(x.replace(/\s+/,'T'));
+    // Parse as local time
+    let dt = new Date(x.replace(/\s+/,'T'));
+    if(dt.getHours() < 8){
+        dt.setDate(dt.getDate() - 1);
+    }
+    return dt;
 }
 
-function adjustFor8AM(date){
-    let d = new Date(date);
-    if(d.getHours() < 8){
-        d.setDate(d.getDate() - 1);
-    }
-    return d;
+function format24(dt){
+    let y = dt.getFullYear();
+    let m = String(dt.getMonth()+1).padStart(2,'0');
+    let d = String(dt.getDate()).padStart(2,'0');
+    let h = String(dt.getHours()).padStart(2,'0');
+    let mi = String(dt.getMinutes()).padStart(2,'0');
+    let s = String(dt.getSeconds()).padStart(2,'0');
+    return `${y}-${m}-${d} ${h}:${mi}:${s}`;
 }
 
 function analyze(){
     const b1 = document.getElementById('box1').value.trim().split(/\n/);
     const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
-    // Parse Purchases
-    let subs = [];
-    for(let i=0; i<b1.length; i+=4){
+    // Parse purchases (4 lines each)
+    let subs=[];
+    for(let i=0;i<b1.length;i+=4){
         let status = b1[i].trim();
-        let updated = b1[i+1].trim().split(/\t+/)[0]; // take timestamp
+        if(status!=='Succeed') continue;
+        let updated = b1[i+1].split('\t')[0].trim();
         let ptype = b1[i+2].trim();
         let amt = parseFloat(b1[i+3].trim());
-        if(ptype!=='sub_pack') continue;
-        if(status!=='Succeed') continue;
-
         let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+        if(ptype==='sub_pack') tier='Bronze';
         if(!tier) continue;
-
-        let start = parseTS(updated);
-        start = adjustFor8AM(start);
-
-        // Check for overlapping subscriptions of same tier
-        let overlap = subs.find(s=>s.tier===tier && s.end >= start);
-        if(overlap){
-            overlap.end = new Date(overlap.end.getTime() + 7*24*3600*1000);
-        } else {
-            let end = new Date(start.getTime() + 7*24*3600*1000);
-            subs.push({tier,start,end});
-        }
+        let start = new Date(updated.replace(/\s+/,'T'));
+        subs.push({tier,start,originalStart: start, extended:false});
     }
 
-    // Parse Game Flow (claims)
-    let claims = [];
-    for(let i=0; i<b2.length; i+=3){
-        let ts = b2[i+2].trim();
-        let unplayed = parseFloat(b2[i].split(/\t+/)[1]); // example mapping
-        let gc = parseFloat(b2[i].split(/\t+/)[2]);
-        let tier = null;
-        if(unplayed===0.5 && gc===2000) tier='Bronze';
-        if(unplayed===2 && gc===10000) tier='Silver';
-        if(unplayed===5.5 && gc===40000) tier='Gold';
-        if(!tier) continue;
-        let cts = parseTS(ts);
-        cts = adjustFor8AM(cts);
-        claims.push({tier, ts:cts});
-    }
-
-    // Generate HTML
-    let html = '';
+    // Merge/extend logic
+    subs.sort((a,b)=>a.start-b.start);
+    let mergedSubs = [];
     subs.forEach(s=>{
+        let last = mergedSubs.filter(ms=>ms.tier===s.tier).slice(-1)[0];
+        if(last && s.start <= last.end){
+            last.end = new Date(last.end.getTime() + 7*24*3600*1000);
+            mergedSubs.push({...s, start:s.start, extended:true, end:new Date(s.start.getTime()+7*24*3600*1000)});
+        } else {
+            s.end = new Date(s.start.getTime() + 7*24*3600*1000);
+            mergedSubs.push(s);
+        }
+    });
+
+    // Parse claims (3 lines each)
+    let claims=[];
+    for(let i=0;i<b2.length;i+=3){
+        let tierLine = b2[i+1].trim();
+        let tier = tierLine.includes('Bronze')?'Bronze':tierLine.includes('Silver')?'Silver':'Gold';
+        let ts = parseTS(b2[i+2].trim());
+        claims.push({tier, ts});
+    }
+
+    // Generate output
+    let html='';
+    mergedSubs.forEach((s,idx)=>{
         const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-        html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${String(s.start.getMonth()+1).padStart(2,'0')}-${String(s.start.getDate()).padStart(2,'0')} ${String(s.start.getHours()).padStart(2,'0')}:${String(s.start.getMinutes()).padStart(2,'0')} → ${s.end.getFullYear()}-${String(s.end.getMonth()+1).padStart(2,'0')}-${String(s.end.getDate()).padStart(2,'0')} ${String(s.end.getHours()).padStart(2,'0')}:${String(s.end.getMinutes()).padStart(2,'0')})</h3>`; 
-
-        let days = [];
+        html += `<h3 class="${color}">${s.tier} Subscription (${format24(s.start)} → ${format24(s.end)})${s.extended? ' (Extended)':''}</h3>`;
+        let days=[];
         let current = new Date(s.start);
-        let dayCount = 1;
-        while(current < s.end && dayCount <= 7){
-            let nextDay = new Date(current);
-            if(dayCount === 1){
-                // Day 1 ends at 08:00 next day
-                let dayEnd = new Date(current);
-                dayEnd.setDate(dayEnd.getDate()+1);
-                dayEnd.setHours(8,0,0,0);
-                nextDay = dayEnd;
-            } else {
-                nextDay.setHours(8,0,0,0);
-                nextDay.setDate(nextDay.getDate()+1);
-            }
+        let dayCount=1;
+        while(current<s.end){
+            let dayStart = new Date(current);
+            let nextReset = new Date(dayStart);
+            nextReset.setDate(dayStart.getDate()+1);
+            nextReset.setHours(8,0,0,0);
+            if(dayStart.getHours()>=8) nextReset.setDate(dayStart.getDate()+1);
 
-            let claim = claims.find(c=>c.tier===s.tier && c.ts >= current && c.ts < nextDay);
-            let today = new Date();
-            let cls = claim? 'claimed': (nextDay>today? 'future':'missed');
-            days.push(`<div class="day ${cls}"><b>Day ${dayCount}</b><br>${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')} ${String(current.getHours()).padStart(2,'0')}:${String(current.getMinutes()).padStart(2,'0')}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+            let dayEnd = nextReset;
+            if(dayEnd>s.end) dayEnd=s.end;
 
-            current = nextDay;
+            let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
+            let cls = claim? 'claimed': (dayEnd>new Date()? 'future': 'missed');
+            if(s.extended) cls='extended';
+
+            days.push(`<div class="day ${cls}"><b>Day ${dayCount}</b><br>${format24(dayStart)}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}${cls==='extended'?'<br>Extended':''}</div>`);
+
+            current = new Date(dayEnd);
             dayCount++;
         }
         html += `<div class="grid">${days.join('')}</div>`;
@@ -129,7 +130,6 @@ function analyze(){
     document.getElementById('results').innerHTML = html;
 }
 </script>
-
 <p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
 </body>
 </html>
