@@ -13,12 +13,12 @@
  .bronze { background: #cd7f32; color: white; }
  .silver { background: #c0c0c0; color: black; }
  .gold { background: #ffd700; color: black; }
- .extended { border: 2px solid #000; }
  .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
  .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
  .claimed { background: #c6efce; }
  .missed { background: #ffc7ce; }
  .future { background: #d9d9d9; }
+ .extended { border: 2px dashed red; padding:2px; margin-bottom:10px;}
 </style>
 </head>
 <body>
@@ -36,85 +36,102 @@
 <div id="results"></div>
 
 <script>
-function parseTS(x){
-    let d = new Date(x.replace(/\s+/,'T'));
-    if(d.getHours() < 8){
-        d.setDate(d.getDate()-1);
-    }
-    return d;
+function parseTS(x){ return new Date(x.replace(/\s+/,'T')); }
+
+function adjustForReset(date){
+  let d = new Date(date);
+  if(d.getHours() < 8){
+    d.setDate(d.getDate() -1);
+  }
+  d.setHours(d.getHours(), d.getMinutes(), d.getSeconds());
+  return d;
+}
+
+function formatTS(date){
+  const y = date.getFullYear();
+  const m = ('0'+(date.getMonth()+1)).slice(-2);
+  const d = ('0'+date.getDate()).slice(-2);
+  const h = ('0'+date.getHours()).slice(-2);
+  const min = ('0'+date.getMinutes()).slice(-2);
+  const s = ('0'+date.getSeconds()).slice(-2);
+  return `${y}-${m}-${d} ${h}:${min}:${s}`;
 }
 
 function analyze(){
-    const b1 = document.getElementById('box1').value.trim().split(/\n/);
-    const b2 = document.getElementById('box2').value.trim().split(/\n/);
+ const b1 = document.getElementById('box1').value.trim().split(/\n/);
+ const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
-    // Parse purchases (every 4 lines = 1 record)
-    let subs = [];
-    for(let i=0;i<b1.length;i+=4){
-        let status = b1[i].trim();
-        let updated = b1[i+1]?.split(/\t+/)[0].trim();
-        let ptype = b1[i+2]?.trim();
-        let amt = parseFloat(b1[i+3]);
-        if(status!=='Succeed') continue;
-        if(ptype!=='sub_pack' && ptype!=='start_pack' && ptype!=='first') continue;
-        let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': amt===10?'Start':amt===2?'Default':null;
-        if(!tier) continue;
-        let start = parseTS(updated);
-        let end = new Date(start.getTime() + 7*24*3600*1000); // initial 7 days
-        subs.push({tier,start,end,originalStart:start,extended:false});
-    }
+ // Parse Purchases (4 lines each)
+ let subs=[];
+ for(let i=0;i<b1.length;i+=4){
+   const status = b1[i].trim();
+   if(status!=='Succeed') continue;
+   const updated = parseTS(b1[i+1].split('\t')[0]);
+   const ptype = b1[i+2].trim();
+   const amt = parseFloat(b1[i+3]);
+   let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+   if(ptype==='sub_pack') tier='Bronze';
+   if(!tier) continue;
 
-    // Merge overlapping subscriptions and mark extensions
-    let allSubs = [];
-    subs.forEach(s=>{
-        // Check if overlaps existing subscription of same tier
-        let overlap = allSubs.find(a=>a.tier===s.tier && s.start <= a.end);
-        if(overlap){
-            // Extend
-            overlap.end = new Date(Math.max(overlap.end.getTime(), s.end.getTime()));
-            allSubs.push({...s, extended:true});
-        } else {
-            allSubs.push(s);
-        }
-    });
+   // Adjust for 08:00 reset
+   const start = updated;
+   const adjustedStart = adjustForReset(start);
 
-    // Parse Game Flow (every 3 lines = 1 record)
-    let claims = [];
-    for(let i=0;i<b2.length;i+=3){
-        let stats = b2[i].trim().split(/\t+/);
-        let desc = b2[i+1]?.trim();
-        let info = b2[i+2]?.trim().split(/\t+/);
-        if(!info || info.length<3) continue;
-        let ts = parseTS(info[2]);
-        claims.push({ts});
-    }
+   // Check if overlapping previous subscription of same tier
+   let prev = subs.filter(s=>s.tier===tier && adjustedStart <= s.end);
+   if(prev.length){
+     const lastSub = prev[prev.length-1];
+     const newEnd = new Date(lastSub.end.getTime() + 7*24*3600*1000);
+     subs.push({tier, start: adjustedStart, end: newEnd, extended:true, originalStart:start});
+   } else {
+     const end = new Date(adjustedStart.getTime() + 7*24*3600*1000);
+     subs.push({tier, start: adjustedStart, end:end, extended:false, originalStart:start});
+   }
+ }
 
-    // Render subscriptions
-    let html = '';
-    allSubs.forEach((s,idx)=>{
-        const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':s.tier==='Gold'?'gold':'';
-        const extClass = s.extended?' extended':'';
-        html += `<h3 class="${color}${extClass}">${s.tier} Subscription (${s.start.getFullYear()}-${String(s.start.getMonth()+1).padStart(2,'0')}-${String(s.start.getDate()).padStart(2,'0')} ${String(s.start.getHours()).padStart(2,'0')}:${String(s.start.getMinutes()).padStart(2,'0')} → ${s.end.getFullYear()}-${String(s.end.getMonth()+1).padStart(2,'0')}-${String(s.end.getDate()).padStart(2,'0')} ${String(s.end.getHours()).padStart(2,'0')}:${String(s.end.getMinutes()).padStart(2,'0')})</h3>`;
+ // Parse Game Flow Data (3 lines per claim)
+ let claims=[];
+ for(let i=0;i<b2.length;i+=3){
+   const tierLine = b2[i+1].trim();
+   let tier=null;
+   if(tierLine.includes('Bronze')) tier='Bronze';
+   else if(tierLine.includes('Silver')) tier='Silver';
+   else if(tierLine.includes('Gold')) tier='Gold';
+   else if(tierLine.includes('Weekly Subscription')) tier='Bronze'; // default mapping
 
-        let days = [];
-        let dayStart = new Date(s.start.getTime());
-        let dayNum = 1;
-        while(dayStart < s.end){
-            let nextDay8 = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate()+1,8,0,0);
-            let dayEnd = nextDay8;
-            if(dayEnd > s.end) dayEnd = s.end;
-            let claim = claims.find(c=>c.ts>=dayStart && c.ts<dayEnd);
-            let today = new Date();
-            let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
-            days.push(`<div class="day ${cls}"><b>Day ${dayNum}</b><br>${String(dayStart.getFullYear()).padStart(4,'0')}-${String(dayStart.getMonth()+1).padStart(2,'0')}-${String(dayStart.getDate()).padStart(2,'0')} ${String(dayStart.getHours()).padStart(2,'0')}:${String(dayStart.getMinutes()).padStart(2,'0')}<br>${claim? 'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-            dayStart = nextDay8;
-            dayNum++;
-        }
+   const ts = parseTS(b2[i+2].split('\t')[2]);
+   claims.push({tier, ts});
+ }
 
-        html += `<div class="grid">${days.join('')}</div>`;
-    });
+ // Render results
+ let html='';
+ subs.forEach((s,idx)=>{
+   const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
+   html += `<h3 class="${color}">${s.tier} Subscription (${formatTS(s.originalStart)} → ${formatTS(s.end)})${s.extended? ' - Extended':''}</h3>`;
+   if(s.extended) html += `<div class="extended">This subscription was extended</div>`;
 
-    document.getElementById('results').innerHTML = html;
+   // Calculate days
+   let days=[];
+   let dayStart = new Date(s.originalStart);
+   let dayCount=1;
+   while(dayStart < s.end){
+     let nextDay = new Date(dayStart);
+     nextDay.setDate(nextDay.getDate()+1);
+     nextDay.setHours(8,0,0,0);
+     if(nextDay > s.end) nextDay = s.end;
+
+     const claim = claims.find(c=>c.tier===s.tier && c.ts >= dayStart && c.ts < nextDay);
+     const today = new Date();
+     let cls = claim? 'claimed': (nextDay>today? 'future':'missed');
+
+     days.push(`<div class="day ${cls}"><b>Day ${dayCount}</b><br>${formatTS(dayStart)}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+     dayStart = nextDay;
+     dayCount++;
+   }
+   html += `<div class="grid">${days.join('')}</div>`;
+ });
+
+ document.getElementById('results').innerHTML = html;
 }
 </script>
 <p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
