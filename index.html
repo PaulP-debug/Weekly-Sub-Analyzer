@@ -1,446 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Weekly Subscription Analyzer — Smart (Version C)</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weekly Subscription Analyzer</title>
 <style>
-  :root{
-    --bronze:#CD7F32;
-    --silver:#DADADA;
-    --gold:#FFD700;
-    --accent:#0f62fe;
-    --muted:#6b7280;
-  }
-  html,body{height:100%;margin:0;font-family:Inter, Arial, Helvetica, sans-serif;background:#f5f7fb;color:#111}
-  .wrap{max-width:1180px;margin:18px auto;padding:18px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(15,20,30,0.06)}
-  h1{margin:0 0 8px;font-size:22px}
-  .desc{color:var(--muted);font-size:13px;margin-bottom:12px}
-  .two{display:flex;gap:14px}
-  .col{flex:1;min-width:280px}
-  label{font-weight:700;margin-top:6px;display:block}
-  textarea{width:100%;min-height:200px;padding:10px;border-radius:8px;border:1px solid #e6e9ef;font-family:monospace;box-sizing:border-box;resize:vertical}
-  .actions{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
-  .btn{padding:10px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:700}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-ghost{background:#f2f8ff;color:var(--accent);border:1px solid #d6e6ff}
-  .btn-muted{background:#f3f4f6;color:#111}
-  .note{font-size:13px;color:var(--muted);margin-top:6px}
-  .table-wrap{margin-top:10px;border-radius:8px;border:1px solid #eee;padding:8px;background:#fbfdff;overflow:auto;max-height:320px}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{padding:8px;border:1px solid #e9eef5;text-align:left;vertical-align:middle}
-  th{background:#f7fafc}
-  .result{margin-top:16px}
-  .type-section{margin-top:16px;padding:12px;border-radius:8px;border:1px solid #eee;background:#fff}
-  .header-colored{padding:8px 12px;border-radius:8px;color:#111;font-weight:800;display:inline-block}
-  .hdr-bronze{background:var(--bronze);color:#fff}
-  .hdr-silver{background:var(--silver);color:#111}
-  .hdr-gold{background:var(--gold);color:#111}
-  .calendar-grid{display:flex;gap:8px;margin-top:10px}
-  .cal-day{flex:1;text-align:center;padding:10px 6px;border-radius:8px;font-weight:800;color:#222;min-width:78px}
-  .cal-claimed{background:#d8f4dc;border:1px solid #8fdda2}
-  .cal-missed{background:#ffe2e2;border:1px solid #ff9a9a}
-  .cal-future{background:#fff6cc;border:1px solid #ffe680}
-  .details{overflow:hidden;transition:max-height .35s ease,opacity .2s;max-height:0;opacity:0}
-  .details.open{max-height:1600px;opacity:1}
-  .details-body{padding:10px;background:#fbfdff;border-radius:8px;border:1px solid #eee;margin-top:8px}
-  .day-row{display:flex;gap:12px;padding:8px;border-radius:6px;margin-bottom:8px;align-items:flex-start}
-  .day-label{min-width:150px;font-weight:800}
-  .status-claimed{color:#0b8a3e;font-weight:800}
-  .status-missed{color:#b32a2a;font-weight:800}
-  .status-future{color:#b07a00;font-weight:800}
-  .small-muted{font-size:12px;color:var(--muted)}
-  .export-btn{background:var(--accent);color:#fff;padding:8px 10px;border-radius:8px;border:none;font-weight:800;cursor:pointer}
-  .signature{display:flex;justify-content:flex-end;margin-top:18px;font-size:13px;color:var(--muted)}
-  @media (max-width:920px){.two{flex-direction:column}}
+ body { font-family: Arial, sans-serif; padding: 20px; }
+ h2 { margin-top: 30px; }
+ textarea { width: 100%; height: 180px; font-family: monospace; }
+ table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+ th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
+ .bronze { background: #cd7f32; color: white; }
+ .silver { background: #c0c0c0; color: black; }
+ .gold { background: #ffd700; color: black; }
+ .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
+ .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
+ .claimed { background: #c6efce; }
+ .missed { background: #ffc7ce; }
+ .future { background: #d9d9d9; }
+ #purchasesTableWrap { display:none; margin-top:20px; }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Weekly Subscription Analyzer — Smart</h1>
-    <p class="desc">Paste your Purchases Data and Game Flow Data (exact format you provided). The parser will auto-reconstruct stacked/multiline records, build editable tables, and analyze subscriptions & claims.</p>
+<h1>Weekly Subscription Analyzer</h1>
 
-    <div class="two">
-      <div class="col">
-        <label>Purchases Data</label>
-        <textarea id="rawPurchases" placeholder="Paste Purchases Data (stacked 4-line records or CSV/TSV)..."></textarea>
-        <div class="actions">
-          <button class="btn btn-primary" onclick="convertPurchases()">Convert Purchases → Table</button>
-          <button class="btn btn-ghost" onclick="clearPurchases()">Clear</button>
-          <div class="note">Expected stacked pattern per record: <strong>Status</strong> (line) → <strong>Updated + App Order Id + Order No + Channel + Purchase ID</strong> (tabbed line) → <strong>Purchase Type</strong> (line) → <strong>Amount</strong> (line). Parser also supports headered CSV/TSV.</div>
-        </div>
-        <div id="purchasesTableWrap" class="table-wrap" style="display:none"></div>
-      </div>
+<h2>Purchases Data (Box 1)</h2>
+<textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
+<button onclick="convertPurchases()" style="padding:8px 20px; margin-top:5px;">Convert Purchases</button>
+<div id="purchasesTableWrap"></div>
 
-      <div class="col">
-        <label>Game Flow Data</label>
-        <textarea id="rawFlow" placeholder="Paste Game Flow Data (stacked 3-line records or CSV/TSV)..."></textarea>
-        <div class="actions">
-          <button class="btn btn-primary" onclick="convertFlow()">Convert Game Flow → Table</button>
-          <button class="btn btn-ghost" onclick="clearFlow()">Clear</button>
-          <div class="note">Expected stacked pattern per record: <strong>6 numeric fields</strong> (tabbed) → <strong>Reason</strong> (line) → <strong>Note1 Note2 CreatingTime</strong> (tabbed). Parser auto-reconstructs three-line groups even if merged.</div>
-        </div>
-        <div id="flowTableWrap" class="table-wrap" style="display:none"></div>
-      </div>
-    </div>
+<h2>Game Flow Data (Box 2)</h2>
+<textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
 
-    <div class="actions" style="margin-top:12px">
-      <button class="btn btn-primary" onclick="analyzeFromTables()">Analyze</button>
-      <button class="btn btn-ghost" onclick="previewRaw()">Preview Raw JSON</button>
-      <button class="btn btn-muted" onclick="resetAll()">Reset All</button>
-      <div class="note" style="margin-left:8px">Edit generated tables directly (cells are contenteditable). Click <strong>Save Edits</strong> under each table to persist before analyzing.</div>
-    </div>
+<button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscriptions</button>
 
-    <div id="results" class="result"></div>
-
-    <div class="signature">by Paul P</div>
-  </div>
+<h2>Results</h2>
+<div id="results"></div>
 
 <script>
-/* ----------------- Utilities ----------------- */
-function trimLines(s){ return s.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(l=>l.length>0); }
-function splitSmart(line){
-  if(line.includes('\t')) return line.split('\t').map(x=>x.trim());
-  const out=[]; let cur=''; let inQ=false;
-  for(let i=0;i<line.length;i++){ const ch=line[i];
-    if(ch === '"'){ if(inQ && i+1<line.length && line[i+1]==='"'){ cur+='"'; i++; continue; } inQ=!inQ; continue; }
-    if(ch === ',' && !inQ){ out.push(cur); cur=''; } else cur += ch;
-  }
-  out.push(cur);
-  return out.map(x=>x.trim());
-}
-function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function parseDateFlexible(s){
-  if(!s) return null;
-  let t = String(s).trim();
-  if(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/.test(t)) t = t.replace(/\s+/, 'T');
-  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) t = t + ':00';
-  if(/^\d{10,}$/.test(t)){ const n=Number(t); return n>1e11? new Date(n) : new Date(n*1000); }
-  const d = new Date(t);
-  return isNaN(d) ? null : d;
-}
-function fmt(dt){ if(!dt) return '-'; const y=dt.getFullYear(); const m=String(dt.getMonth()+1).padStart(2,'0'); const d=String(dt.getDate()).padStart(2,'0'); const hh=String(dt.getHours()).padStart(2,'0'); const mm=String(dt.getMinutes()).padStart(2,'0'); const ss=String(dt.getSeconds()).padStart(2,'0'); return `${y}-${m}-${d} ${hh}:${mm}:${ss}`; }
+let PURCHASES = { headers: [], rows: [] };
 
-/* ----------------- Purchases parser (4-line groups) ----------------- */
-let PURCHASES = { headers:[], rows:[] };
-function stitchPurchasesLines(lines){
-  const groups = [];
-  let i = 0;
-  if(lines.length && lines[0].toLowerCase().includes('status') && lines[0].toLowerCase().includes('amount')){ i = 1; }
-  while(i < lines.length){
-    let status = null, lineB = null, ptype = null, amount = null;
-    const buffer = [];
-    for(let j=0;j<6 && (i+j)<lines.length; j++){ buffer.push(lines[i+j]); }
-    let idxLineB = -1;
-    for(let k=0;k<buffer.length;k++){ if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].includes('\t')){ idxLineB = k; break; } }
-    if(idxLineB === -1){ for(let k=0;k<buffer.length;k++){ if(/\d{4}-\d{2}-\d{2}/.test(buffer[k]) && buffer[k].split(/\s+/).length>2){ idxLineB = k; break; } } }
-    let idxType = buffer.findIndex(b=>/\b(sub_pack|start_pack|default)\b/i.test(b));
-    let idxAmt = buffer.findIndex(b=>/^\d+(\.\d+)?$/.test(b));
-    if(idxLineB >= 0){
-      if(idxLineB-1 >= 0) status = buffer[idxLineB-1];
-      lineB = buffer[idxLineB];
-      if(idxType > idxLineB) ptype = buffer[idxType];
-      if(idxAmt > idxLineB) amount = buffer[idxAmt];
-      let lastUsed = Math.max(idxLineB, idxType, idxAmt);
-      if(lastUsed < 0) lastUsed = idxLineB;
-      const consumed = Math.max(1, lastUsed+1);
-      groups.push({status:status||'', lineB:lineB||'', ptype:ptype||'', amount:amount||''});
-      i += consumed;
-    } else if(idxType >= 0 && idxAmt >= 0){
-      status = buffer[0];
-      let candidateLineB = buffer.find(b=>/\d{4}-\d{2}-\d{2}/.test(b));
-      lineB = candidateLineB || buffer[1] || '';
-      ptype = buffer[idxType];
-      amount = buffer[idxAmt];
-      const lastUsed = Math.max(0, idxType, idxAmt, buffer.indexOf(candidateLineB));
-      groups.push({status, lineB, ptype, amount});
-      i += lastUsed+1;
-    } else {
-      groups.push({status:buffer[0]||'', lineB:'', ptype:'', amount:''});
-      i += 1;
-    }
+function parseTS(x){ return new Date(x.replace(/\s+/,'T')); }
+
+function convertPurchases() {
+  const raw = document.getElementById('box1').value || '';
+  const lines = raw.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) {
+    alert('Paste Purchases Data first');
+    return;
   }
-  return groups;
-}
-function convertPurchases(){
-  const raw = document.getElementById('rawPurchases').value || '';
-  const lines = trimLines(raw);
-  if(lines.length===0){ alert('Paste Purchases Data first'); return; }
-  const groups = stitchPurchasesLines(lines);
+
   const headers = ['Status','Updated','App Order Id','Order No','Channel','Purchase ID','Purchase Type','Amount'];
   const rows = [];
-  groups.forEach(g=>{
-    const parts = splitSmart(g.lineB);
-    const updated = parts[0] || '';
-    const appOrderId = parts[1] || '';
-    const orderNo = parts[2] || '';
-    const channel = parts[3] || '';
-    const purchaseId = parts[4] || '';
+
+  let startIdx = 0;
+  if (lines[0].toLowerCase().includes('status')) startIdx = 1;
+
+  for (let i = startIdx; i < lines.length; i += 4) {
+    if (i + 3 >= lines.length) break;
+    const status = lines[i];
+    const lineB = lines[i + 1].split('\t').map(x => x.trim());
+    const updated = lineB[0] || '';
+    const appOrderId = lineB[1] || '';
+    const orderNo = lineB[2] || '';
+    const channel = lineB[3] || '';
+    const purchaseId = lineB[4] || '';
+    const purchaseType = lines[i + 2];
+    const amount = lines[i + 3];
+
     rows.push({
-      'Status': g.status||'',
+      'Status': status,
       'Updated': updated,
       'App Order Id': appOrderId,
       'Order No': orderNo,
       'Channel': channel,
       'Purchase ID': purchaseId,
-      'Purchase Type': g.ptype||'',
-      'Amount': g.amount||''
+      'Purchase Type': purchaseType,
+      'Amount': amount
     });
-  });
-  PURCHASES = { headers, rows };
-  renderEditableTable('purchasesTableWrap', PURCHASES, 'purch');
-  document.getElementById('purchasesTableWrap').style.display='block';
-}
-
-/* ----------------- Game Flow parser (3-line groups) ----------------- */
-let FLOW = { headers:[], rows:[] };
-function stitchFlowLines(lines){
-  const recs = []; let i = 0;
-  if(lines.length && lines[0].toLowerCase().includes('played') && lines[0].toLowerCase().includes('creating')) i = 1;
-  while(i < lines.length){
-    let line1 = null, line2 = null, line3 = null;
-    let part = splitSmart(lines[i]);
-    if(part.length >= 6){
-      line1 = lines[i];
-      if(i+1 < lines.length) line2 = lines[i+1];
-      if(i+2 < lines.length) line3 = lines[i+2];
-      if(!line3 || !(/\d{4}-\d{2}-\d{2}/.test(line3))){
-        let j = i+2; let accumulated = '';
-        while(j < lines.length && !(/\d{4}-\d{2}-\d{2}/.test(accumulated))){ accumulated += (accumulated ? '\t' : '') + lines[j]; j++; if(/\d{4}-\d{2}-\d{2}/.test(accumulated)) break; }
-        if(accumulated) line3 = accumulated;
-        recs.push({line1, line2: line2||'', line3: line3||''});
-        i = j;
-      } else {
-        recs.push({line1, line2: line2||'', line3: line3||''});
-        i += 3;
-      }
-    } else {
-      let candidate = [];
-      for(let j=i;j<Math.min(lines.length,i+6);j++) candidate.push(lines[j]);
-      let foundIndex = -1;
-      for(let k=0;k<candidate.length;k++){ if(splitSmart(candidate[k]).length >=6){ foundIndex = k; break; } }
-      if(foundIndex >= 0){ i = i + foundIndex; continue; } else { i++; }
-    }
   }
-  return recs;
-}
-function convertFlow(){
-  const raw = document.getElementById('rawFlow').value || '';
-  const lines = trimLines(raw);
-  if(lines.length===0){ alert('Paste Game Flow Data first'); return; }
-  const groups = stitchFlowLines(lines);
-  const headers = ['Played SC','Unplayed SC','GC','Current Played SC','Current Unplayed SC','Current Chips','Reason','Note1','Note2','Creating Time'];
-  const rows = [];
-  groups.forEach(g=>{
-    const a = splitSmart(g.line1);
-    const c = splitSmart(g.line3);
-    while(a.length<6) a.push('');
-    while(c.length<3) c.push('');
-    let ct = '';
-    for(let j=c.length-1;j>=0;j--){ if(/\d{4}-\d{2}-\d{2}/.test(c[j])||/^\d{10,}$/.test(c[j])){ ct = c[j]; break; } }
-    if(!ct) ct = c[c.length-1]||'';
-    rows.push({
-      'Played SC': a[0]||'',
-      'Unplayed SC': a[1]||'',
-      'GC': a[2]||'',
-      'Current Played SC': a[3]||'',
-      'Current Unplayed SC': a[4]||'',
-      'Current Chips': a[5]||'',
-      'Reason': (g.line2||'').trim(),
-      'Note1': c[0]||'',
-      'Note2': c[1]||'',
-      'Creating Time': ct
-    });
-  });
-  FLOW = { headers, rows };
-  renderEditableTable('flowTableWrap', FLOW, 'flow');
-  document.getElementById('flowTableWrap').style.display='block';
+
+  PURCHASES = { headers, rows };
+  renderPurchasesTable();
 }
 
-/* ----------------- Editable table rendering ----------------- */
-function renderEditableTable(containerId, data, prefix){
-  const wrap = document.getElementById(containerId);
+function renderPurchasesTable() {
+  const wrap = document.getElementById('purchasesTableWrap');
+  if (!wrap) return;
+  const { headers, rows } = PURCHASES;
   let html = '<table><thead><tr>';
-  data.headers.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
+  headers.forEach(h => html += `<th>${h}</th>`);
   html += '</tr></thead><tbody>';
-  data.rows.forEach((r,ri)=>{
-    html += `<tr data-row="${ri}">`;
-    data.headers.forEach((h,ci)=>{
-      const id = `${prefix}_${ri}_${ci}`;
-      const val = r[h] === undefined ? '' : r[h];
-      html += `<td contenteditable="true" id="${id}">${escapeHtml(val)}</td>`;
-    });
+  rows.forEach(r => {
+    html += '<tr>';
+    headers.forEach(h => html += `<td>${r[h]}</td>`);
     html += '</tr>';
   });
   html += '</tbody></table>';
-  html += `<div style="margin-top:8px"><button class="btn btn-ghost" onclick="saveEdits('${containerId}','${prefix}')">Save Edits</button></div>`;
   wrap.innerHTML = html;
-}
-function saveEdits(containerId, prefix){
-  const wrap = document.getElementById(containerId); const table = wrap.querySelector('table'); if(!table) return;
-  const headers = (prefix==='purch') ? PURCHASES.headers : FLOW.headers;
-  const trs = table.querySelectorAll('tbody tr'); const rows = [];
-  trs.forEach(tr=>{
-    const tds = tr.querySelectorAll('td'); const obj = {};
-    headers.forEach((h,i)=> obj[h] = (tds[i] ? tds[i].innerText.trim() : ''));
-    rows.push(obj);
-  });
-  if(prefix==='purch'){ PURCHASES.rows = rows; PURCHASES.headers = headers; alert('Purchases saved'); } else { FLOW.rows = rows; FLOW.headers = headers; alert('Game Flow saved'); }
+  wrap.style.display = 'block';
 }
 
-/* ----------------- Clear & Reset ----------------- */
-function clearPurchases(){ document.getElementById('rawPurchases').value=''; document.getElementById('purchasesTableWrap').innerHTML=''; document.getElementById('purchasesTableWrap').style.display='none'; PURCHASES={headers:[],rows:[]}; }
-function clearFlow(){ document.getElementById('rawFlow').value=''; document.getElementById('flowTableWrap').innerHTML=''; document.getElementById('flowTableWrap').style.display='none'; FLOW={headers:[],rows:[]}; }
-function resetAll(){ if(confirm('Reset all data?')){ clearPurchases(); clearFlow(); document.getElementById('results').innerHTML=''; } }
+function analyze(){
+ if(PURCHASES.rows.length === 0){
+   alert('Please convert Purchases first');
+   return;
+ }
 
-/* ----------------- Analysis logic (as specified) ----------------- */
-function stripNumber(s){ if(s===null||s===undefined) return NaN; return parseFloat(String(s).replace(/[^\d.\-]/g,'')); }
-function amountToType(v){ const n = Number(stripNumber(v)); if(isNaN(n)) return null; const key = Math.round(n*100)/100; if(key===7) return 'Bronze'; if(key===30) return 'Silver'; if(key===90) return 'Gold'; return null; }
-function isSuccess(s){ return String(s||'').trim().toLowerCase() === 'succeed'; }
-function detectClaimType(unplayedSC, gc){ const a=Number(stripNumber(unplayedSC)); const g=Number(stripNumber(gc)); if(!isNaN(a) && !isNaN(g)){ if(Math.abs(a-0.5)<0.001 && Math.abs(g-2000)<1) return 'Bronze'; if(Math.abs(a-2.0)<0.001 && Math.abs(g-10000)<1) return 'Silver'; if(Math.abs(a-5.5)<0.001 && Math.abs(g-40000)<1) return 'Gold'; } return null; }
-function addDays(dt, days){ const o=new Date(dt.getTime()); o.setDate(o.getDate()+days); return o; }
-function startMidnight(dt){ const s=new Date(dt.getTime()); s.setHours(0,0,0,0); return s; }
-function adjustClaimForReset(d){ const a=new Date(d.getTime()); if(a.getHours()<8) a.setDate(a.getDate()-1); a.setHours(0,0,0,0); return a; }
+ const b2 = document.getElementById('box2').value.trim().split(/\n/);
+ let claims=[];
+ for(let i=1;i<b2.length;i++){
+   let line=b2[i].split('\t');
+   if(line.length < 10) continue;
+   let unplayed=parseFloat(line[1]);
+   let gc=parseFloat(line[2]);
+   let ts=line[9].trim();
+   let tier=null;
+   if(unplayed===0.5 && gc===2000) tier='Bronze';
+   if(unplayed===2 && gc===10000) tier='Silver';
+   if(unplayed===5.5 && gc===40000) tier='Gold';
+   if(!tier) continue;
+   claims.push({tier, ts:parseTS(ts)});
+ }
 
-function computeIntervals(purchases){
-  const byType={};
-  purchases.forEach(p=>{ if(!byType[p.type]) byType[p.type]=[]; byType[p.type].push(p); });
-  const out={};
-  Object.keys(byType).forEach(type=>{
-    const arr = byType[type].slice().sort((a,b)=>a.updated - b.updated);
-    const intervals = [];
-    arr.forEach(p=>{
-      const start = p.updated;
-      const duration = 7;
-      if(intervals.length === 0) intervals.push({ start:new Date(start), end:addDays(start,duration), purchases:[p] });
-      else {
-        const cur = intervals[intervals.length-1];
-        if(start <= cur.end){ cur.end = addDays(cur.end,duration); cur.purchases.push(p); }
-        else intervals.push({ start:new Date(start), end:addDays(start,duration), purchases:[p] });
-      }
-    });
-    out[type]=intervals;
-  });
-  return out;
+ let subs=[];
+ PURCHASES.rows.forEach(p=>{
+   if(p['Purchase Type']!=='sub_pack') return;
+   if(p['Status']!=='Succeed') return;
+   const amt = parseFloat(p['Amount']);
+   let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+   if(!tier) return;
+   const start = parseTS(p['Updated']);
+   const end = new Date(start.getTime()+7*24*3600*1000);
+   subs.push({tier,start,end});
+ });
+
+ let html='';
+ subs.forEach((s,idx)=>{
+   const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
+   html += `<h3 class="${color}">${s.tier} Subscription (${s.start.toLocaleString()} → ${s.end.toLocaleString()})</h3>`;
+   let days=[];
+   for(let d=0; d<7; d++){
+     let dayStart = new Date(s.start.getTime()+d*86400000);
+     let dayEnd = new Date(dayStart.getTime()+86400000);
+     let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
+     let today = new Date();
+     let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
+     days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${dayStart.toLocaleDateString()}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+   }
+   html += `<div class="grid">${days.join('')}</div>`;
+ });
+
+ document.getElementById('results').innerHTML = html;
 }
-
-function matchClaimsToIntervals(intervalsByType, claims){
-  const result={};
-  Object.keys(intervalsByType).forEach(type=>{
-    result[type]=[];
-    intervalsByType[type].forEach(iv=>{
-      const days=[]; const sMid = startMidnight(iv.start);
-      for(let i=0;i<7;i++){ const dd=new Date(sMid.getTime()); dd.setDate(dd.getDate()+i); days.push({ dayIndex:i, dateLabel:`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`, claimTimes:[] }); }
-      claims.forEach(c=>{
-        if(c.type !== type) return;
-        if(c.creatingTime >= iv.start && c.creatingTime < iv.end){
-          const adj = adjustClaimForReset(c.creatingTime);
-          const diff = Math.floor((adj - sMid) / (24*3600*1000));
-          if(diff >=0 && diff <7) days[diff].claimTimes.push(c.creatingTime);
-        }
-      });
-      days.forEach(d=>d.claimed = (d.claimTimes.length>0));
-      result[type].push({ interval: iv, days });
-    });
-  });
-  return result;
-}
-
-/* ----------------- Main Analyze entry ----------------- */
-function analyzeFromTables(){
-  if(!PURCHASES.rows || PURCHASES.rows.length===0){ if(trimLines(document.getElementById('rawPurchases').value||'').length) convertPurchases(); else return alert('No Purchases Data. Paste and Convert first.'); }
-  if(!FLOW.rows || FLOW.rows.length===0){ if(trimLines(document.getElementById('rawFlow').value||'').length) convertFlow(); else return alert('No Game Flow Data. Paste and Convert first.'); }
-  const headers1 = PURCHASES.headers; const rows1 = PURCHASES.rows;
-  const findKey = (hdrs,key) => hdrs.find(h=>h.trim().toLowerCase()===key.toLowerCase()) || null;
-  const H_STATUS = findKey(headers1,'Status'); const H_UPDATED = findKey(headers1,'Updated'); const H_PURCHASE_TYPE = findKey(headers1,'Purchase Type') || findKey(headers1,'PurchaseType')||findKey(headers1,'purchase_type'); const H_AMOUNT = findKey(headers1,'Amount');
-  if(!H_STATUS||!H_UPDATED||!H_PURCHASE_TYPE||!H_AMOUNT){ return alert('Purchases table missing required columns: Status, Updated, Purchase Type, Amount.'); }
-  const purchases = [];
-  rows1.forEach(r=>{
-    if(String((r[H_PURCHASE_TYPE]||'')).trim().toLowerCase() !== 'sub_pack') return;
-    if(!isSuccess(r[H_STATUS])) return;
-    const d = parseDateFlexible(r[H_UPDATED]); if(!d) return;
-    const type = amountToType(r[H_AMOUNT]); if(!type) return;
-    purchases.push({ type, updated: d, amount: Number(stripNumber(r[H_AMOUNT])), raw: r });
-  });
-  const intervalsByType = computeIntervals(purchases);
-  const headers2 = FLOW.headers; const rows2 = FLOW.rows;
-  const find2 = key => headers2.find(h=>h.trim().toLowerCase()===key.toLowerCase()) || headers2.find(h=>h.toLowerCase().includes(key.toLowerCase()));
-  const H_UNPLAYED = find2('Unplayed SC') || find2('unplayed');
-  const H_GC = find2('GC') || find2('gc');
-  const H_CREATING = find2('Creating Time') || find2('creating') || find2('created') || find2('time') || find2('timestamp');
-  if(!H_UNPLAYED || !H_GC || !H_CREATING){ if(!confirm('Game Flow table missing Unplayed SC / GC / Creating Time. Continue with empty claims?')) return; }
-  const claims = [];
-  rows2.forEach(r=>{
-    const unp = H_UNPLAYED ? r[H_UNPLAYED] : r['Unplayed SC'] || '';
-    const gc = H_GC ? r[H_GC] : r['GC'] || '';
-    const cr = H_CREATING ? r[H_CREATING] : r['Creating Time'] || '';
-    const dt = parseDateFlexible(cr); if(!dt) return;
-    const ct = detectClaimType(unp,gc);
-    claims.push({ type: ct, creatingTime: dt, raw: r, unplayed: unp, gc: gc });
-  });
-  const mapping = matchClaimsToIntervals(intervalsByType, claims);
-  renderFinal(intervalsByType, mapping);
-}
-
-/* ----------------- Render final UI ----------------- */
-function renderFinal(intervalsByType, mapping){
-  const out = document.getElementById('results'); let html='';
-  let totalIntervals = 0; ['Bronze','Silver','Gold'].forEach(t=>{ totalIntervals += (intervalsByType[t]||[]).length; });
-  html += `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px"><div style="background:#fff;padding:10px;border-radius:8px;border:1px solid #eee;min-width:160px"><div class="small-muted">Total intervals</div><div style="font-weight:800;font-size:18px;margin-top:6px">${totalIntervals}</div></div>`;
-  ['Bronze','Silver','Gold'].forEach(t=>{ html += `<div style="background:#fff;padding:10px;border-radius:8px;border:1px solid #eee;min-width:140px"><div class="small-muted">${t}</div><div style="font-weight:800;font-size:18px;margin-top:6px">${(intervalsByType[t]||[]).length}</div></div>`; });
-  html += `</div>`;
-  const now = new Date();
-  ['Bronze','Silver','Gold'].forEach(type=>{
-    const intervals = intervalsByType[type] || [];
-    const hdrClass = type === 'Bronze' ? 'hdr-bronze' : (type === 'Silver' ? 'hdr-silver' : 'hdr-gold');
-    html += `<div class="type-section"><div style="display:flex;justify-content:space-between;align-items:center"><div><span class="header-colored ${hdrClass}">${type}</span> <span style="margin-left:10px" class="small-muted">${intervals.length} interval(s)</span></div></div>`;
-    if(intervals.length === 0){ html += `<div class="small-muted" style="margin-top:10px">No intervals.</div></div>`; return; }
-    intervals.forEach((iv,idx)=>{
-      const days = []; const sMid = startMidnight(iv.start);
-      for(let i=0;i<7;i++){ const dd=new Date(sMid.getTime()); dd.setDate(dd.getDate()+i); days.push({dayIndex:i,dateLabel:`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`, claimTimes:[], claimed:false}); }
-      const mapped = (mapping[type] && mapping[type][idx]) ? mapping[type][idx].days : null;
-      if(mapped && mapped.length===7){ for(let i=0;i<7;i++){ days[i].claimed = mapped[i].claimed; days[i].claimTimes = mapped[i].claimTimes.slice(); } }
-      html += `<div style="margin-top:12px"><strong>Interval ${idx+1}</strong> — ${escapeHtml(fmt(iv.start))} → ${escapeHtml(fmt(iv.end))} (purchases: ${iv.purchases.length})</div>`;
-      html += `<div class="calendar-grid">`;
-      days.forEach(d=>{
-        const [y,m,dd] = d.dateLabel.split('-').map(x=>Number(x));
-        const dayMid = new Date(y,m-1,dd,0,0,0);
-        let cls='cal-missed';
-        if(d.claimed) cls='cal-claimed';
-        else if(dayMid.getTime() > now.getTime()) cls='cal-future';
-        html += `<div class="cal-day ${cls}"><div style="font-size:12px;color:#444;margin-bottom:6px">Day ${d.dayIndex+1}</div>${d.dateLabel}</div>`;
-      });
-      html += `</div>`;
-      const detailsId = `details_${type}_${idx}`;
-      html += `<div style="margin-top:8px"><button class="btn btn-ghost" onclick="toggleDetails('${detailsId}', this)">Show Details ▼</button></div>`;
-      html += `<div id="${detailsId}" class="details"><div class="details-body">`;
-      days.forEach(d=>{
-        const [y,m,dd] = d.dateLabel.split('-').map(x=>Number(x));
-        const dayMid = new Date(y,m-1,dd,0,0,0);
-        let statusLabel='', statusClass='';
-        if(d.claimed){ statusLabel='Claimed'; statusClass='status-claimed'; }
-        else if(dayMid.getTime() > now.getTime()){ statusLabel='To be Claimed'; statusClass='status-future'; }
-        else { statusLabel='Not Claimed'; statusClass='status-missed'; }
-        html += `<div class="day-row"><div class="day-label">Day ${d.dayIndex+1} — ${d.dateLabel}</div><div style="flex:1"><div class="${statusClass}">${statusLabel}</div>`;
-        if(d.claimTimes && d.claimTimes.length){ html += `<div style="margin-top:6px">${d.claimTimes.map(ct=>escapeHtml(fmt(ct))).join('<br>')}</div>`; } else html += `<div class="small-muted" style="margin-top:6px">No claim timestamps</div>`;
-        html += `</div></div>`;
-      });
-      html += `</div></div>`;
-    });
-    html += `</div>`;
-  });
-  html += `<div style="margin-top:14px;display:flex;gap:8px;align-items:center"><button class="export-btn" onclick="exportIntervals()">Export Intervals CSV</button><button class="export-btn" onclick="exportClaims()">Export Claims CSV</button><div class="small-muted" style="margin-left:8px">Exports follow current analysis.</div></div>`;
-  out.innerHTML = html;
-  window.__LAST_COMPUTED = { intervalsByType, mapping };
-  out.scrollIntoView({behavior:'smooth'});
-}
-function toggleDetails(id, btn){ const el = document.getElementById(id); if(!el) return; const open = el.classList.toggle('open'); btn.innerText = open ? 'Hide Details ▲' : 'Show Details ▼'; }
-function toCSV(rows, headers){ const esc=v=>{ if(v===null||v===undefined) return ''; const s=String(v); if(s.includes('"')||s.includes(',')||s.includes('\n')) return `\"${s.replace(/\"/g,'\"\"')}\"`; return s; }; let lines=[headers.map(esc).join(',')]; rows.forEach(r=>lines.push(headers.map(h=>esc(r[h])).join(','))); return lines.join('\n'); }
-function downloadFile(filename, text){ const blob=new Blob([text], { type: 'text/csv;charset=utf-8;' }); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },500); }
-function exportIntervals(){ const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.intervalsByType).forEach(type=>{ data.intervalsByType[type].forEach((iv,idx)=>{ const purchases = iv.purchases.map(p => (p.raw && (p.raw['Purchase ID']||p.raw['PurchaseID']||'')) || '').join('|'); const amt = iv.purchases.reduce((s,p)=>s+(Number(p.amount)||0),0); rows.push({ subscription_type:type, interval_index: idx+1, start: fmt(iv.start), end: fmt(iv.end), purchases_count: iv.purchases.length, amount_sum: amt.toFixed(2), purchase_ids: purchases }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','start','end','purchases_count','amount_sum','purchase_ids']); downloadFile('intervals.csv', csv); }
-function exportClaims(){ const data = window.__LAST_COMPUTED; if(!data) return alert('No analysis results.'); const rows=[]; Object.keys(data.mapping).forEach(type=>{ (data.mapping[type]||[]).forEach((m, idx)=>{ (m.days||[]).forEach(d=>{ rows.push({ subscription_type:type, interval_index: idx+1, day_index: d.dayIndex+1, date_label: d.dateLabel, claimed: d.claimed ? 'Yes' : 'No', claim_times: (d.claimTimes||[]).map(ct=>fmt(ct)).join('|') }); }); }); }); const csv = toCSV(rows, ['subscription_type','interval_index','day_index','date_label','claimed','claim_times']); downloadFile('claims.csv', csv); }
-function previewRaw(){ document.getElementById('results').innerHTML = `<pre style="max-height:380px;overflow:auto">${escapeHtml(JSON.stringify({purchases:PURCHASES,flow:FLOW},null,2))}</pre>`; }
-window.__internal = { stitchPurchasesLines, stitchFlowLines, PURCHASES, FLOW };
 </script>
+
+<p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
 </body>
 </html>
