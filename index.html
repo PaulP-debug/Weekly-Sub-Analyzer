@@ -23,7 +23,10 @@
 <body>
 <h1>Weekly Subscription Analyzer</h1>
 
+<h2>Purchases Data</h2>
 <textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
+
+<h2>Game Flow Data</h2>
 <textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
 
 <button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
@@ -32,94 +35,101 @@
 <div id="results"></div>
 
 <script>
-function parseTS(x){ return new Date(x.replace(/\s+/,'T')); }
+function parseTS(x){
+    return new Date(x.replace(/\s+/,'T'));
+}
 
-function adjustToReset(d){
-  let reset = new Date(d);
-  if(d.getHours()<8){
-    reset.setDate(reset.getDate()-1);
-  }
-  reset.setHours(8,0,0,0);
-  return reset;
+function adjustFor8AM(date){
+    let d = new Date(date);
+    if(d.getHours() < 8){
+        d.setDate(d.getDate() - 1);
+    }
+    return d;
 }
 
 function analyze(){
- const b1 = document.getElementById('box1').value.trim().split(/\n/);
- const b2 = document.getElementById('box2').value.trim().split(/\n/);
+    const b1 = document.getElementById('box1').value.trim().split(/\n/);
+    const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
- let subs=[];
- // Parse Purchases
- for(let i=0;i<b1.length;i+=4){
-   let status = b1[i].trim();
-   let updated = b1[i+1].split('\t')[0].trim();
-   let ptype = b1[i+2].trim();
-   let amt = parseFloat(b1[i+3].trim());
+    // Parse Purchases
+    let subs = [];
+    for(let i=0; i<b1.length; i+=4){
+        let status = b1[i].trim();
+        let updated = b1[i+1].trim().split(/\t+/)[0]; // take timestamp
+        let ptype = b1[i+2].trim();
+        let amt = parseFloat(b1[i+3].trim());
+        if(ptype!=='sub_pack') continue;
+        if(status!=='Succeed') continue;
 
-   if(ptype!=='sub_pack' || status!=='Succeed') continue;
+        let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+        if(!tier) continue;
 
-   let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
-   if(!tier) continue;
+        let start = parseTS(updated);
+        start = adjustFor8AM(start);
 
-   let start = parseTS(updated);
-   let end = new Date(start.getTime() + 7*24*3600*1000);
+        // Check for overlapping subscriptions of same tier
+        let overlap = subs.find(s=>s.tier===tier && s.end >= start);
+        if(overlap){
+            overlap.end = new Date(overlap.end.getTime() + 7*24*3600*1000);
+        } else {
+            let end = new Date(start.getTime() + 7*24*3600*1000);
+            subs.push({tier,start,end});
+        }
+    }
 
-   subs.push({tier,start,end});
- }
+    // Parse Game Flow (claims)
+    let claims = [];
+    for(let i=0; i<b2.length; i+=3){
+        let ts = b2[i+2].trim();
+        let unplayed = parseFloat(b2[i].split(/\t+/)[1]); // example mapping
+        let gc = parseFloat(b2[i].split(/\t+/)[2]);
+        let tier = null;
+        if(unplayed===0.5 && gc===2000) tier='Bronze';
+        if(unplayed===2 && gc===10000) tier='Silver';
+        if(unplayed===5.5 && gc===40000) tier='Gold';
+        if(!tier) continue;
+        let cts = parseTS(ts);
+        cts = adjustFor8AM(cts);
+        claims.push({tier, ts:cts});
+    }
 
- // Merge overlapping/extended subscriptions by tier
- let mergedSubs = [];
- ['Bronze','Silver','Gold'].forEach(tier=>{
-   let list = subs.filter(s=>s.tier===tier).sort((a,b)=>a.start-b.start);
-   if(list.length===0) return;
-   let current = {...list[0]};
-   for(let j=1;j<list.length;j++){
-     if(list[j].start <= current.end){
-       current.end = new Date(current.end.getTime() + 7*24*3600*1000);
-     } else {
-       mergedSubs.push(current);
-       current = {...list[j]};
-     }
-   }
-   mergedSubs.push(current);
- });
+    // Generate HTML
+    let html = '';
+    subs.forEach(s=>{
+        const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
+        html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${String(s.start.getMonth()+1).padStart(2,'0')}-${String(s.start.getDate()).padStart(2,'0')} ${String(s.start.getHours()).padStart(2,'0')}:${String(s.start.getMinutes()).padStart(2,'0')} → ${s.end.getFullYear()}-${String(s.end.getMonth()+1).padStart(2,'0')}-${String(s.end.getDate()).padStart(2,'0')} ${String(s.end.getHours()).padStart(2,'0')}:${String(s.end.getMinutes()).padStart(2,'0')})</h3>`; 
 
- // Parse Game Flow claims
- let claims=[];
- for(let i=0;i<b2.length;i+=3){
-   let unplayed=parseFloat(b2[i].split('\t')[1]);
-   let gc=parseFloat(b2[i].split('\t')[2]);
-   let ts=b2[i+2].split('\t')[2];
-   let tier=null;
-   if(unplayed===0.5 && gc===2000) tier='Bronze';
-   if(unplayed===2 && gc===10000) tier='Silver';
-   if(unplayed===5.5 && gc===40000) tier='Gold';
-   if(!tier) continue;
-   claims.push({tier, ts: parseTS(ts)});
- }
+        let days = [];
+        let current = new Date(s.start);
+        let dayCount = 1;
+        while(current < s.end && dayCount <= 7){
+            let nextDay = new Date(current);
+            if(dayCount === 1){
+                // Day 1 ends at 08:00 next day
+                let dayEnd = new Date(current);
+                dayEnd.setDate(dayEnd.getDate()+1);
+                dayEnd.setHours(8,0,0,0);
+                nextDay = dayEnd;
+            } else {
+                nextDay.setHours(8,0,0,0);
+                nextDay.setDate(nextDay.getDate()+1);
+            }
 
- let html='';
- mergedSubs.forEach((s,idx)=>{
-   const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-   html += `<h3 class="${color}">${s.tier} Subscription (${s.start.toLocaleString('en-GB',{hour12:false})} → ${s.end.toLocaleString('en-GB',{hour12:false})})</h3>`;
-   let days=[];
-   let dayStart = new Date(s.start);
-   while(dayStart < s.end){
-     let nextReset = new Date(dayStart);
-     nextReset.setHours(8,0,0,0);
-     if(dayStart.getHours()>=8) nextReset.setDate(nextReset.getDate()+1);
-     let dayEnd = nextReset;
-     let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
-     let today = new Date();
-     let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
-     days.push(`<div class="day ${cls}"><b>Day</b><br>${dayStart.toLocaleDateString('en-GB')}<br>${dayStart.toLocaleTimeString('en-GB',{hour12:false})}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-     dayStart = dayEnd;
-   }
-   html += `<div class="grid">${days.join('')}</div>`;
- });
+            let claim = claims.find(c=>c.tier===s.tier && c.ts >= current && c.ts < nextDay);
+            let today = new Date();
+            let cls = claim? 'claimed': (nextDay>today? 'future':'missed');
+            days.push(`<div class="day ${cls}"><b>Day ${dayCount}</b><br>${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')} ${String(current.getHours()).padStart(2,'0')}:${String(current.getMinutes()).padStart(2,'0')}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
 
- document.getElementById('results').innerHTML = html;
+            current = nextDay;
+            dayCount++;
+        }
+        html += `<div class="grid">${days.join('')}</div>`;
+    });
+
+    document.getElementById('results').innerHTML = html;
 }
 </script>
+
 <p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
 </body>
 </html>
