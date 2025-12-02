@@ -5,26 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Weekly Subscription Analyzer</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-h2 { margin-top: 30px; }
-textarea { width: 100%; height: 180px; font-family: monospace; margin-top: 10px; }
-.grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
-.day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
-.bronze { background: #cd7f32; color: white; }
-.silver { background: #c0c0c0; color: black; }
-.gold { background: #ffd700; color: black; }
-.claimed { background: #c6efce; }
-.missed { background: #ffc7ce; }
-.future { background: #d9d9d9; }
+ body { font-family: Arial, sans-serif; padding: 20px; }
+ h2 { margin-top: 30px; }
+ textarea { width: 100%; height: 180px; font-family: monospace; }
+ table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+ th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
+ .bronze { background: #cd7f32; color: white; }
+ .silver { background: #c0c0c0; color: black; }
+ .gold { background: #ffd700; color: black; }
+ .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
+ .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
+ .claimed { background: #c6efce; }
+ .missed { background: #ffc7ce; }
+ .future { background: #d9d9d9; }
 </style>
 </head>
 <body>
 <h1>Weekly Subscription Analyzer</h1>
 
-<h2>Purchases Data</h2>
 <textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
-
-<h2>Game Flow Data</h2>
 <textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
 
 <button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
@@ -33,93 +32,94 @@ textarea { width: 100%; height: 180px; font-family: monospace; margin-top: 10px;
 <div id="results"></div>
 
 <script>
-function parseTS(x){
-  let d = new Date(x.replace(/\s+/,'T'));
-  return isNaN(d)? null : d;
-}
+function parseTS(x){ return new Date(x.replace(/\s+/,'T')); }
 
-function format24(d){
-  return d.getFullYear() + '-' +
-         String(d.getMonth()+1).padStart(2,'0') + '-' +
-         String(d.getDate()).padStart(2,'0') + ' ' +
-         String(d.getHours()).padStart(2,'0') + ':' +
-         String(d.getMinutes()).padStart(2,'0') + ':' +
-         String(d.getSeconds()).padStart(2,'0');
-}
-
-function adjustForReset(d){
-  let copy = new Date(d.getTime());
-  if(copy.getHours() < 8){
-    copy.setDate(copy.getDate() - 1);
+function adjustToReset(d){
+  let reset = new Date(d);
+  if(d.getHours()<8){
+    reset.setDate(reset.getDate()-1);
   }
-  copy.setHours(8,0,0,0);
-  return copy;
+  reset.setHours(8,0,0,0);
+  return reset;
 }
 
 function analyze(){
-  const b1 = document.getElementById('box1').value.trim().split(/\n/).filter(l=>l.trim()!=='');
-  const b2 = document.getElementById('box2').value.trim().split(/\n/).filter(l=>l.trim()!=='');
-  
-  let subs=[];
-  for(let i=0;i<b1.length;i+=4){
-    if(i+3 >= b1.length) continue;
-    let status = b1[i].trim();
-    let updatedLine = b1[i+1].trim();
-    let updated = updatedLine.split(/\t+/)[0];
-    let ptype = b1[i+2].trim();
-    let amt = parseFloat(b1[i+3]);
-    if(status!=='Succeed' || ptype!=='sub_pack' || isNaN(amt)) continue;
-    let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
-    if(!tier) continue;
-    let start = parseTS(updated);
-    if(!start) continue;
-    let end = new Date(start.getTime()+7*24*3600*1000);
-    subs.push({tier,start,end});
-  }
+ const b1 = document.getElementById('box1').value.trim().split(/\n/);
+ const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
-  let claims=[];
-  for(let i=0;i<b2.length;i+=3){
-    if(i+2 >= b2.length) continue;
-    let line1 = b2[i].split(/\t+/);
-    if(line1.length<3) continue;
-    let unplayed=parseFloat(line1[1]);
-    let gc=parseFloat(line1[2]);
-    let tsStrLine = b2[i+2].split(/\t+/);
-    if(tsStrLine.length<3) continue;
-    let tsStr = tsStrLine[2];
-    let tier=null;
-    if(unplayed===0.5 && gc===2000) tier='Bronze';
-    if(unplayed===2 && gc===10000) tier='Silver';
-    if(unplayed===5.5 && gc===40000) tier='Gold';
-    if(!tier) continue;
-    let ts=parseTS(tsStr);
-    if(!ts) continue;
-    claims.push({tier, ts});
-  }
+ let subs=[];
+ // Parse Purchases
+ for(let i=0;i<b1.length;i+=4){
+   let status = b1[i].trim();
+   let updated = b1[i+1].split('\t')[0].trim();
+   let ptype = b1[i+2].trim();
+   let amt = parseFloat(b1[i+3].trim());
 
-  if(subs.length===0) { alert('No valid subscription records found!'); return; }
+   if(ptype!=='sub_pack' || status!=='Succeed') continue;
 
-  let html='';
-  subs.forEach((s,idx)=>{
-    const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-    html += `<h3 class="${color}">${s.tier} Subscription (${format24(s.start)} → ${format24(s.end)})</h3>`;
-    let days=[];
-    for(let d=0; d<7; d++){
-      let dayStart = new Date(s.start.getTime()+d*86400000);
-      let dayReset = adjustForReset(dayStart);
-      let dayEnd = new Date(dayReset.getTime()+86400000);
-      let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayReset && c.ts<dayEnd);
-      let today = new Date();
-      let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
-      days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${format24(dayReset)}${claim? '<br>Claimed<br>'+format24(claim.ts):''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-    }
-    html += `<div class="grid">${days.join('')}</div>`;
-  });
+   let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+   if(!tier) continue;
 
-  document.getElementById('results').innerHTML = html;
+   let start = parseTS(updated);
+   let end = new Date(start.getTime() + 7*24*3600*1000);
+
+   subs.push({tier,start,end});
+ }
+
+ // Merge overlapping/extended subscriptions by tier
+ let mergedSubs = [];
+ ['Bronze','Silver','Gold'].forEach(tier=>{
+   let list = subs.filter(s=>s.tier===tier).sort((a,b)=>a.start-b.start);
+   if(list.length===0) return;
+   let current = {...list[0]};
+   for(let j=1;j<list.length;j++){
+     if(list[j].start <= current.end){
+       current.end = new Date(current.end.getTime() + 7*24*3600*1000);
+     } else {
+       mergedSubs.push(current);
+       current = {...list[j]};
+     }
+   }
+   mergedSubs.push(current);
+ });
+
+ // Parse Game Flow claims
+ let claims=[];
+ for(let i=0;i<b2.length;i+=3){
+   let unplayed=parseFloat(b2[i].split('\t')[1]);
+   let gc=parseFloat(b2[i].split('\t')[2]);
+   let ts=b2[i+2].split('\t')[2];
+   let tier=null;
+   if(unplayed===0.5 && gc===2000) tier='Bronze';
+   if(unplayed===2 && gc===10000) tier='Silver';
+   if(unplayed===5.5 && gc===40000) tier='Gold';
+   if(!tier) continue;
+   claims.push({tier, ts: parseTS(ts)});
+ }
+
+ let html='';
+ mergedSubs.forEach((s,idx)=>{
+   const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
+   html += `<h3 class="${color}">${s.tier} Subscription (${s.start.toLocaleString('en-GB',{hour12:false})} → ${s.end.toLocaleString('en-GB',{hour12:false})})</h3>`;
+   let days=[];
+   let dayStart = new Date(s.start);
+   while(dayStart < s.end){
+     let nextReset = new Date(dayStart);
+     nextReset.setHours(8,0,0,0);
+     if(dayStart.getHours()>=8) nextReset.setDate(nextReset.getDate()+1);
+     let dayEnd = nextReset;
+     let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
+     let today = new Date();
+     let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
+     days.push(`<div class="day ${cls}"><b>Day</b><br>${dayStart.toLocaleDateString('en-GB')}<br>${dayStart.toLocaleTimeString('en-GB',{hour12:false})}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+     dayStart = dayEnd;
+   }
+   html += `<div class="grid">${days.join('')}</div>`;
+ });
+
+ document.getElementById('results').innerHTML = html;
 }
 </script>
-
 <p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
 </body>
 </html>
