@@ -5,149 +5,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Weekly Subscription Analyzer</title>
 <style>
- body { font-family: Arial, sans-serif; padding: 20px; }
- h2 { margin-top: 30px; }
- textarea { width: 100%; height: 120px; font-family: monospace; }
- table { border-collapse: collapse; width: 100%; margin-top: 10px; }
- th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
- .bronze { background: #cd7f32; color: white; }
- .silver { background: #c0c0c0; color: black; }
- .gold { background: #ffd700; color: black; }
- .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
- .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
- .claimed { background: #c6efce; }
- .missed { background: #ffc7ce; }
- .future { background: #d9d9d9; }
- .extended { border: 2px dashed red; }
- .flex { display: flex; gap: 10px; }
- .flex > div { flex: 1; }
+  body { font-family: Arial, sans-serif; padding: 20px; }
+  h2 { margin-top: 30px; }
+  textarea { width: 100%; height: 120px; font-family: monospace; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
+  .bronze { background: #cd7f32; color: white; }
+  .silver { background: #c0c0c0; color: black; }
+  .gold { background: #ffd700; color: black; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
+  .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
+  .claimed { background: #c6efce; }
+  .missed { background: #ffc7ce; }
+  .future { background: #d9d9d9; }
+  .row { display: flex; gap: 10px; }
+  .column { flex: 1; }
 </style>
 </head>
 <body>
 <h1>Weekly Subscription Analyzer</h1>
 
-<div class="flex">
-  <div>
+<div class="row">
+  <div class="column">
     <h2>Purchases Data</h2>
     <textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
-  </div>
-  <div>
+
     <h2>Game Flow Data</h2>
     <textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
+
+    <button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
+  </div>
+
+  <div class="column">
+    <h2>Valid Subscriptions</h2>
+    <div id="validSubs"></div>
   </div>
 </div>
 
-<button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
-
-<h2>Valid Subscriptions</h2>
-<div id="validSubs"></div>
-
-<h2>Analyzed Subscriptions</h2>
+<h2>Analyzed Subscription Grid</h2>
 <div id="results"></div>
 
 <script>
-function parseTS(x){ return new Date(x.replace(/\s+/,'T')); }
-
-function adjustForReset(date) {
-    let adjusted = new Date(date);
-    if(adjusted.getHours() < 8) {
-        adjusted.setDate(adjusted.getDate() - 1);
-    }
-    adjusted.setHours(adjusted.getHours(), adjusted.getMinutes(), adjusted.getSeconds(), 0);
-    return adjusted;
+function parseTS(x){
+  let dt = new Date(x.replace(/\s+/,'T'));
+  // Adjust for 08:00 reset
+  if(dt.getHours() < 8){
+    dt.setDate(dt.getDate()-1);
+  }
+  return dt;
 }
 
 function analyze(){
- const b1 = document.getElementById('box1').value.trim().split(/\n/);
- const b2 = document.getElementById('box2').value.trim().split(/\n/);
+  const b1 = document.getElementById('box1').value.trim().split(/\n/);
+  const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
- let subs=[];
- let claims=[];
-
- // Parse Purchases (4-line format)
- for(let i=0; i<b1.length; i+=4){
+  // Parse Purchases
+  let subs=[];
+  for(let i=0; i<b1.length; i+=4){ // 4 lines per purchase
     let status = b1[i].trim();
-    let updated = b1[i+1]?.split(/\t+/)[0];
-    let ptype = b1[i+2]?.trim();
-    let amt = parseFloat(b1[i+3]?.trim());
-
-    if(status !== 'Succeed') continue;
-    if(ptype !== 'sub_pack' && ptype !== 'start_pack' && ptype !== 'Bronze' && ptype !== 'Silver' && ptype !== 'Gold') continue;
-
-    let tier = amt === 7 ? 'Bronze' : amt === 30 ? 'Silver' : amt === 90 ? 'Gold' : null;
+    let updated = b1[i+1]?.trim();
+    let type = b1[i+2]?.trim();
+    let amt = parseFloat(b1[i+3]);
+    if(status!=='Succeed' || type!=='sub_pack') continue;
+    let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
     if(!tier) continue;
+    let start = parseTS(updated.split('\t')[0]); 
+    let end = new Date(start.getTime()+7*24*3600*1000); // We'll adjust Day2 etc in grid
+    subs.push({tier,start,end, amt});
+  }
 
-    let start = parseTS(updated);
-    subs.push({tier, start, end: null, extended: false});
- }
+  // Show valid subscriptions
+  let validHTML = '<table><tr><th>Tier</th><th>Amount</th><th>Purchase Date</th></tr>';
+  subs.forEach(s=>validHTML += `<tr><td>${s.tier}</td><td>${s.amt}</td><td>${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')}</td></tr>`);
+  validHTML += '</table>';
+  document.getElementById('validSubs').innerHTML = validHTML;
 
- // Merge overlapping subscriptions (extensions)
- subs.sort((a,b)=>a.start-b.start);
- let mergedSubs = [];
- subs.forEach(s=>{
-    let last = mergedSubs[mergedSubs.length-1];
-    if(last && last.tier === s.tier && last.start.getTime() + 7*86400000 >= s.start.getTime()) {
-        // Extend previous subscription
-        mergedSubs.push({tier: s.tier, start: s.start, end: new Date(s.start.getTime() + 7*86400000), extended: true});
-    } else {
-        mergedSubs.push({tier: s.tier, start: s.start, end: new Date(s.start.getTime() + 7*86400000), extended: false});
+  // Parse Game Flow
+  let claims=[];
+  for(let i=0; i<b2.length; i+=3){ // 3 lines per claim
+    let line1 = b2[i].split(/\t+/);
+    let type = b2[i+1]?.trim();
+    let ts = b2[i+2]?.trim();
+    let tier=null;
+    if(type==='Weekly Subscription'){
+      let unplayed = parseFloat(line1[1]);
+      let gc = parseFloat(line1[2]);
+      if(unplayed===0.5 && gc===2000) tier='Bronze';
+      if(unplayed===2 && gc===10000) tier='Silver';
+      if(unplayed===5.5 && gc===40000) tier='Gold';
     }
- });
- subs = mergedSubs;
+    if(tier) claims.push({tier, ts: parseTS(ts)});
+  }
 
- // Parse Game Flow (3-line format)
- for(let i=0; i<b2.length; i+=3){
-    let statsLine = b2[i]?.split(/\t+/);
-    let descLine = b2[i+1]?.trim();
-    let claimLine = b2[i+2]?.split(/\t+/);
-
-    if(!statsLine || !claimLine) continue;
-
-    let unplayed = parseFloat(statsLine[1]);
-    let gc = parseFloat(statsLine[2]);
-    let ts = claimLine[2].trim();
-    let tier = null;
-
-    if(unplayed === 0.5 && gc === 2000) tier = 'Bronze';
-    if(unplayed === 2 && gc === 10000) tier = 'Silver';
-    if(unplayed === 5.5 && gc === 40000) tier = 'Gold';
-    if(!tier) continue;
-
-    claims.push({tier, ts: parseTS(ts)});
- }
-
- // Show Valid Subscriptions
- let validHtml = '<table><tr><th>Tier</th><th>Purchase Date</th><th>Extended</th></tr>';
- subs.forEach(s=>{
-    validHtml += `<tr><td>${s.tier}</td><td>${s.start.toISOString().slice(0,19).replace('T',' ')}</td><td>${s.extended ? 'Yes' : 'No'}</td></tr>`;
- });
- validHtml += '</table>';
- document.getElementById('validSubs').innerHTML = validHtml;
-
- // Show Analyzed Grid
- let html = '';
- subs.forEach((s,idx)=>{
+  // Build analyzed subscription grid
+  let html='';
+  subs.forEach((s,idx)=>{
     const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.toISOString().slice(0,19).replace('T',' ')} → ${s.end.toISOString().slice(0,19).replace('T',' ')}) ${s.extended ? '(Extended)' : ''}</h3>`;
-    
+    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')} → ${s.end.getFullYear()}-${(s.end.getMonth()+1).toString().padStart(2,'0')}-${s.end.getDate().toString().padStart(2,'0')} ${s.end.getHours().toString().padStart(2,'0')}:${s.end.getMinutes().toString().padStart(2,'0')}:${s.end.getSeconds().toString().padStart(2,'0')})</h3>`;
     let days=[];
-    let dayStart = new Date(s.start);
     for(let d=0; d<7; d++){
-        let dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate()+1);
-        // Adjust claim date for 08:00 reset
-        let claim = claims.find(c=>{
-            let cts = adjustForReset(c.ts);
-            return c.tier===s.tier && cts >= dayStart && cts < dayEnd;
-        });
-        let today = new Date();
-        let cls = claim ? 'claimed' : (dayEnd>today ? 'future' : 'missed');
-        days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${dayStart.toISOString().slice(0,19).replace('T',' ')}${claim? '<br>Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-        dayStart = new Date(dayEnd.getTime());
+      let dayStart = new Date(s.start.getTime());
+      if(d>0){
+        dayStart.setDate(dayStart.getDate()+d);
+        dayStart.setHours(8,0,0,0);
+      }
+      let dayEnd = new Date(dayStart.getTime()+24*3600*1000);
+      let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
+      let today = new Date();
+      let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
+      days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${dayStart.getFullYear()}-${(dayStart.getMonth()+1).toString().padStart(2,'0')}-${dayStart.getDate().toString().padStart(2,'0')} ${dayStart.getHours().toString().padStart(2,'0')}:${dayStart.getMinutes().toString().padStart(2,'0')}<br>${claim? 'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
     }
-    html += `<div class="grid ${s.extended?'extended':''}">${days.join('')}</div>`;
- });
- document.getElementById('results').innerHTML = html;
+    html += `<div class="grid">${days.join('')}</div>`;
+  });
+
+  document.getElementById('results').innerHTML = html;
 }
 </script>
 
