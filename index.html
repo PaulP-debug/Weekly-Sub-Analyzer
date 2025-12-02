@@ -13,7 +13,7 @@
   .bronze { background: #cd7f32; color: white; }
   .silver { background: #c0c0c0; color: black; }
   .gold { background: #ffd700; color: black; }
-  .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; gap:2px; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
   .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
   .claimed { background: #c6efce; }
   .missed { background: #ffc7ce; }
@@ -46,88 +46,103 @@
 <div id="results"></div>
 
 <script>
-// Adjust timestamp for 08:00 reset
 function parseTS(x){
   let dt = new Date(x.replace(/\s+/,'T'));
   return dt;
+}
+
+function adjustForReset(dt){
+  let adj = new Date(dt.getTime());
+  if(adj.getHours() < 8){
+    adj.setDate(adj.getDate()-1);
+  }
+  return adj;
 }
 
 function analyze(){
   const b1 = document.getElementById('box1').value.trim().split(/\n/);
   const b2 = document.getElementById('box2').value.trim().split(/\n/);
 
-  // --- Parse Purchases ---
+  // Parse Purchases
   let subs=[];
-  for(let i=0; i<b1.length; i+=4){ // 4 lines per purchase
+  for(let i=0; i<b1.length; i+=4){
     let status = b1[i].trim();
     let updated = b1[i+1]?.trim();
     let type = b1[i+2]?.trim();
     let amt = parseFloat(b1[i+3]);
-    if(status!=='Succeed' || !['sub_pack','start_pack','first','cash_shield'].includes(type)) continue;
+    if(status!=='Succeed') continue;
 
-    let tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+    let tier = null;
+    if(type==='sub_pack'){
+      tier = amt===7? 'Bronze': amt===30? 'Silver': amt===90? 'Gold': null;
+    } else if(type==='start_pack'){
+      tier = amt===10? 'Bronze': amt===50? 'Silver': amt===150? 'Gold': null;
+    } else if(type==='first'){
+      tier = amt<=24? 'Bronze': amt<=50? 'Silver': 'Gold';
+    }
     if(!tier) continue;
 
-    let start = parseTS(updated.split('\t')[0]);
-    // Apply 08:00 reset logic
-    if(start.getHours()<8) start.setDate(start.getDate()-1);
-
-    let existing = subs.find(s=>s.tier===tier && s.end>=start);
-    if(existing){
-      existing.end = new Date(existing.end.getTime()+7*24*3600*1000); // extend 7 days
-      existing.extended = true;
-    } else {
-      let end = new Date(start.getTime()+7*24*3600*1000);
-      subs.push({tier,start,end, amt, extended:false});
-    }
+    let start = adjustForReset(parseTS(updated.split('\t')[0])); 
+    let end = new Date(start.getTime() + 7*24*3600*1000); 
+    subs.push({tier,start,end, amt});
   }
 
-  // --- Show valid subscriptions ---
+  // Show valid subscriptions
   let validHTML = '<table><tr><th>Tier</th><th>Amount</th><th>Purchase Date</th></tr>';
-  subs.forEach(s=>validHTML += `<tr><td>${s.tier}${s.extended?' (Extended)':''}</td><td>${s.amt}</td><td>${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')}</td></tr>`);
+  subs.forEach(s=>{
+    validHTML += `<tr><td>${s.tier}</td><td>${s.amt}</td><td>${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')}</td></tr>`;
+  });
   validHTML += '</table>';
   document.getElementById('validSubs').innerHTML = validHTML;
 
-  // --- Parse Game Flow ---
+  // Parse Game Flow
   let claims=[];
-  for(let i=0; i<b2.length; i+=3){ // 3 lines per claim
+  for(let i=0; i<b2.length; i+=3){
     let line1 = b2[i].split(/\t+/);
     let type = b2[i+1]?.trim();
     let ts = b2[i+2]?.trim();
+    if(type!=='Weekly Subscription') continue;
+
+    let unplayed = parseFloat(line1[0]);
+    let gc = parseFloat(line1[1]);
+    let currentUnplayed = parseFloat(line1[2]);
+
     let tier=null;
-    if(type==='Weekly Subscription'){
-      let unplayed = parseFloat(line1[0]);
-      let gc = parseFloat(line1[1]);
-      if(unplayed===0.5 && gc===2000) tier='Bronze';
-      if(unplayed===2 && gc===10000) tier='Silver';
-      if(unplayed===5.5 && gc===40000) tier='Gold';
-    }
-    if(tier) claims.push({tier, ts: parseTS(ts)});
+    if(unplayed===0.5 && gc===2000) tier='Bronze';
+    else if(unplayed===2 && gc===10000) tier='Silver';
+    else if(unplayed===5.5 && gc===40000) tier='Gold';
+
+    if(!tier) continue;
+
+    let claimDate = adjustForReset(parseTS(ts));
+    claims.push({tier, ts: claimDate});
   }
 
-  // --- Build analyzed subscription grid ---
+  // Build analyzed subscription grid
   let html='';
   subs.forEach((s,idx)=>{
     const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} → ${s.end.getFullYear()}-${(s.end.getMonth()+1).toString().padStart(2,'0')}-${s.end.getDate().toString().padStart(2,'0')})${s.extended?' (Extended)':''}</h3>`;
+    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')} → ${s.end.getFullYear()}-${(s.end.getMonth()+1).toString().padStart(2,'0')}-${s.end.getDate().toString().padStart(2,'0')} ${s.end.getHours().toString().padStart(2,'0')}:${s.end.getMinutes().toString().padStart(2,'0')}:${s.end.getSeconds().toString().padStart(2,'0')})</h3>`;
 
     let days=[];
-    let dayCounter=1;
-    for(let d=new Date(s.start); d<s.end; d.setDate(d.getDate()+1)){
-      let dayStart = new Date(d);
-      if(dayCounter>1) dayStart.setHours(8,0,0,0);
-      let dayEnd = new Date(dayStart.getTime()+24*3600*1000);
+    let startDay = new Date(s.start.getTime());
+    for(let d=0; startDay<s.end; d++){
+      let dayStart = new Date(startDay.getTime());
+      if(d>0) dayStart.setHours(8,0,0,0);
+      let dayEnd = new Date(dayStart.getTime() + 24*3600*1000);
+      if(dayEnd > s.end) dayEnd = new Date(s.end.getTime());
 
       let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
       let today = new Date();
       let cls = claim? 'claimed': (dayEnd>today? 'future':'missed');
 
-      // Only add future if within subscription range
-      if(cls==='future' && dayStart>=s.end) continue;
+      if(dayStart>=s.start || cls!=='future'){ // only future if active subscription
+        days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${dayStart.getFullYear()}-${(dayStart.getMonth()+1).toString().padStart(2,'0')}-${dayStart.getDate().toString().padStart(2,'0')} ${dayStart.getHours().toString().padStart(2,'0')}:${dayStart.getMinutes().toString().padStart(2,'0')}<br>${claim? 'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+      }
 
-      days.push(`<div class="day ${cls}"><b>Day ${dayCounter}</b><br>${dayStart.getFullYear()}-${(dayStart.getMonth()+1).toString().padStart(2,'0')}-${dayStart.getDate().toString().padStart(2,'0')} ${dayStart.getHours().toString().padStart(2,'0')}:${dayStart.getMinutes().toString().padStart(2,'0')}<br>${claim?'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-      dayCounter++;
+      startDay = new Date(dayEnd.getTime());
     }
+
     html += `<div class="grid">${days.join('')}</div>`;
   });
 
