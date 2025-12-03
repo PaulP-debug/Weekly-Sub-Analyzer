@@ -13,6 +13,11 @@
   .bronze { background: #cd7f32; color: white; }
   .silver { background: #c0c0c0; color: black; }
   .gold { background: #ffd700; color: black; }
+  /* Extended week colors */
+  .bronze.extended { background: #a66a2f; }
+  .silver.extended { background: #999999; }
+  .gold.extended { background: #e6c200; }
+
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
   .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
   .claimed { background: #c6efce; }
@@ -87,7 +92,9 @@ function analyze(){
 
   // ------------------ Show Valid Subscriptions ------------------
   let validHTML = '<table><tr><th>Tier</th><th>Amount</th><th>Purchase Date</th></tr>';
-  subs.forEach(s=>validHTML += `<tr><td>${s.tier}</td><td>${s.amt}</td><td>${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')}</td></tr>`);
+  subs.forEach(s=>{
+    validHTML += `<tr><td>${s.tier}${s.extended?' (Extended)':''}</td><td>${s.amt}</td><td>${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')}:${s.start.getSeconds().toString().padStart(2,'0')}</td></tr>`;
+  });
   validHTML += '</table>';
   document.getElementById('validSubs').innerHTML = validHTML;
 
@@ -111,16 +118,18 @@ function analyze(){
   // ------------------ Build Analyzed Grid ------------------
   let html='';
   subs.forEach(s=>{
-    const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} ${s.start.getHours().toString().padStart(2,'0')}:${s.start.getMinutes().toString().padStart(2,'0')} → ${s.end.getFullYear()}-${(s.end.getMonth()+1).toString().padStart(2,'0')}-${s.end.getDate().toString().padStart(2,'0')})${s.extended? ' (Extended)':''}</h3>`;
+    let colorClass = s.tier.toLowerCase();
+    if(s.extended) colorClass += ' extended';
+    html += `<h3 class="${colorClass}">${s.tier} Subscription (${s.start.getFullYear()}-${(s.start.getMonth()+1).toString().padStart(2,'0')}-${s.start.getDate().toString().padStart(2,'0')} → ${s.end.getFullYear()}-${(s.end.getMonth()+1).toString().padStart(2,'0')}-${s.end.getDate().toString().padStart(2,'0')})${s.extended? ' (Extended)':''}</h3>`;
 
     let days=[];
     let currentDay = new Date(s.start.getTime());
     currentDay.setHours(currentDay.getHours(),0,0,0);
 
-    for(let d=0; currentDay < s.end; d++){
+    let dayCount=1;
+    while(currentDay < s.end){
       let dayStart = new Date(currentDay.getTime());
-      if(d>0){
+      if(dayCount>1){
         dayStart.setHours(8,0,0,0);
       }
       let dayEnd = new Date(dayStart.getTime() + 24*3600*1000);
@@ -132,14 +141,15 @@ function analyze(){
       else if(dayEnd>today) cls='future';
       else cls='missed';
 
-      // Only show future if subscription active
-      if(cls==='future' && dayStart >= s.end) continue;
+      if(cls==='future' && dayStart >= s.end) break;
 
-      days.push(`<div class="day ${cls}"><b>Day ${d+1}</b><br>${dayStart.getFullYear()}-${(dayStart.getMonth()+1).toString().padStart(2,'0')}-${dayStart.getDate().toString().padStart(2,'0')} ${dayStart.getHours().toString().padStart(2,'0')}:${dayStart.getMinutes().toString().padStart(2,'0')}<br>${claim? 'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
+      days.push(`<div class="day ${cls}"><b>Day ${dayCount}</b><br>${dayStart.getFullYear()}-${(dayStart.getMonth()+1).toString().padStart(2,'0')}-${dayStart.getDate().toString().padStart(2,'0')} ${dayStart.getHours().toString().padStart(2,'0')}:${dayStart.getMinutes().toString().padStart(2,'0')}<br>${claim? 'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
 
       currentDay.setDate(currentDay.getDate()+1);
       currentDay.setHours(8,0,0,0);
+      dayCount++;
     }
+
     html += `<div class="grid">${days.join('')}</div>`;
   });
 
