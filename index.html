@@ -7,34 +7,57 @@
 <style>
   body { font-family: Arial, sans-serif; padding: 20px; }
   h2 { margin-top: 30px; }
-  textarea { width: 100%; height: 120px; font-family: monospace; }
   table { border-collapse: collapse; width: 100%; margin-top: 10px; }
   th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
   .bronze { background: #cd7f32; color: white; }
   .silver { background: #c0c0c0; color: black; }
   .gold { background: #ffd700; color: black; }
-  /* Extended week colors */
   .bronze.extended { background: #a66a2f; }
   .silver.extended { background: #999999; }
   .gold.extended { background: #e6c200; }
-
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
   .day { border: 1px solid #ccc; padding: 4px; height: 70px; font-size: 12px; }
   .claimed { background: #c6efce; }
   .missed { background: #ffc7ce; }
   .future { background: #d9d9d9; }
+  td[contenteditable="true"] { background: #f9f9f9; }
+  button { padding:10px 25px; margin-top:20px; font-size:16px; }
 </style>
 </head>
 <body>
 <h1>Weekly Subscription Analyzer</h1>
 
 <h2>Purchases Data</h2>
-<textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
+<table id="purchasesTable">
+  <thead>
+    <tr>
+      <th>Status</th>
+      <th>Updated</th>
+      <th>Type</th>
+      <th>Amount</th>
+      <th>Extra 1</th>
+      <th>Extra 2</th>
+      <th>Extra 3</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+      <td contenteditable="true"></td>
+    </tr>
+  </tbody>
+</table>
+<button type="button" onclick="addPurchaseRow()">Add Row</button>
 
 <h2>Game Flow Data</h2>
-<textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
+<textarea id="box2" placeholder="Paste Game Flow Data here..." style="width:100%; height:120px; font-family: monospace;"></textarea>
 
-<button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
+<button onclick="analyze()">Analyze Subscription</button>
 
 <h2>Valid Subscriptions</h2>
 <div id="validSubs"></div>
@@ -43,12 +66,12 @@
 <div id="results"></div>
 
 <script>
+// ------------------ Helper Functions ------------------
 function parseTS(x){
   let dt = new Date(x.replace(/\s+/,'T'));
   return dt;
 }
 
-// Adjust date for 08:00 reset
 function adjustDateReset(dt){
   let d = new Date(dt.getTime());
   if(d.getHours() < 8){
@@ -57,38 +80,52 @@ function adjustDateReset(dt){
   return d;
 }
 
-function analyze(){
-  const b1 = document.getElementById('box1').value.trim().split(/\n/);
-  const b2 = document.getElementById('box2').value.trim().split(/\n/);
+// ------------------ Add New Row ------------------
+function addPurchaseRow() {
+  const tbody = document.getElementById('purchasesTable').querySelector('tbody');
+  const newRow = document.createElement('tr');
+  for (let i = 0; i < 7; i++) {
+    const cell = document.createElement('td');
+    cell.contentEditable = "true";
+    newRow.appendChild(cell);
+  }
+  tbody.appendChild(newRow);
+}
 
-  // ------------------ Parse Purchases ------------------
-  let subs=[];
-  for(let i=0; i<b1.length; i+=4){
-    let status = b1[i].trim();
-    let updated = b1[i+1]?.trim();
-    let type = b1[i+2]?.trim();
-    let amt = parseFloat(b1[i+3]);
-    if(status!=='Succeed') continue;
+// ------------------ Main Analyze Function ------------------
+function analyze(){
+  // ------------------ Read Purchases Table ------------------
+  const table = document.getElementById('purchasesTable').querySelector('tbody');
+  const rows = Array.from(table.rows);
+
+  let subs = [];
+  rows.forEach(row => {
+    const status = row.cells[0].innerText.trim();
+    const updated = row.cells[1].innerText.trim();
+    const type = row.cells[2].innerText.trim();
+    const amt = parseFloat(row.cells[3].innerText);
+
+    if(status !== 'Succeed') return;
 
     // Detect tier from amount
-    let tier=null;
-    if(amt===7) tier='Bronze';
-    else if(amt===30) tier='Silver';
-    else if(amt===90) tier='Gold';
-    if(!tier) continue;
+    let tier = null;
+    if(amt === 7) tier='Bronze';
+    else if(amt === 30) tier='Silver';
+    else if(amt === 90) tier='Gold';
+    if(!tier) return;
 
     let start = parseTS(updated.split('\t')[0]);
-    let end = new Date(start.getTime() + 7*24*3600*1000); // default 7 days
+    let end = new Date(start.getTime() + 7*24*3600*1000);
 
     // Extend if overlapping
     let last = subs.filter(s=>s.tier===tier).slice(-1)[0];
     if(last && start <= last.end){
-      last.end = new Date(last.end.getTime() + 7*24*3600*1000); // extend 7 more days
+      last.end = new Date(last.end.getTime() + 7*24*3600*1000);
       last.extended = true;
     } else {
       subs.push({tier,start,end,amt});
     }
-  }
+  });
 
   // ------------------ Show Valid Subscriptions ------------------
   let validHTML = '<table><tr><th>Tier</th><th>Amount</th><th>Purchase Date</th></tr>';
@@ -99,6 +136,7 @@ function analyze(){
   document.getElementById('validSubs').innerHTML = validHTML;
 
   // ------------------ Parse Game Flow ------------------
+  const b2 = document.getElementById('box2').value.trim().split(/\n/);
   let claims=[];
   for(let i=0; i<b2.length; i+=3){
     let line1 = b2[i].split(/\t+/);
