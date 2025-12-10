@@ -46,13 +46,13 @@ textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
 table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; width: 100%; }
 th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 
-/* Column widths */
+/* Adjusted column widths */
 th:nth-child(1), td:nth-child(1) { width: 50px; }       /* Day */
-th:nth-child(2), td:nth-child(2) { width: 250px; }     /* Day Range */
-th:nth-child(3), td:nth-child(3) { width: 100px; }     /* Status */
-th:nth-child(4), td:nth-child(4) { width: 120px; }     /* Server Time */
+th:nth-child(2), td:nth-child(2) { width: 320px; }     /* Day Range - wider */
+th:nth-child(3), td:nth-child(3) { width: 150px; }     /* Status - wider */
+th:nth-child(4), td:nth-child(4) { width: 90px; }      /* Server Time - narrower */
 
-.total-days { background: #fff3b0; font-weight: bold; text-align: center; width: 80px; }
+.total-days { width: 50px; background: #fff3b0; font-weight: bold; text-align: center; }
 .claimed { background: #c8f7c5; color: #155724; font-weight: bold; }
 .missed { background: #f8d0d0; color: #8b0000; font-weight: bold; }
 
@@ -299,16 +299,4 @@ function analyze(){
       }
     }
 
-    intervals.forEach(interval=>{
-      columns[amt].appendChild(createTable(interval, interval.totalDays, claims));
-    });
-
-    if(packPurchases.length===0){
-      columns[amt].appendChild(createTable({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts:new Date(), totalDays:0},0,claims));
-    }
-  }
-}
-</script>
-
-</body>
-</html>
+    intervals.forEach(in
