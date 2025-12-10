@@ -8,58 +8,37 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 textarea { width: 100%; font-family: monospace; margin-bottom: 10px; }
 button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
 
-.container {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.left-box, .right-box {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.left-box .left-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.right-box {
-  border: 1px solid #ccc;
-  padding: 10px;
-  background: #f9f9f9;
-  justify-content: flex-start;
-}
-
+.container { display: flex; gap: 20px; }
+.left-box { flex: 1; }
+.right-box { flex: 1; border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; background: #f9f9f9; }
 textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
+.tables-container { display: flex; gap: 20px; flex-wrap: wrap; }
 
-/* Columns for each Sub Pack */
-.tables-container { display: flex; gap: 20px; align-items: flex-start; }
-.pack-column { flex: 1; display: flex; flex-direction: column; }
-
-/* Colored Sub Pack headers */
-.pack-header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-align: center; padding: 6px; border-radius: 4px; }
-
-/* Tables inside each column stack vertically */
-.table-box { display: block; margin-bottom: 10px; }
-table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; width: 100%; }
+.table-box { display: inline-block; vertical-align: top; }
+table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; margin-bottom: 20px; width: 100%; }
 th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 
 /* Adjusted column widths */
-th:nth-child(1), td:nth-child(1) { width: 50px; }       /* Day */
-th:nth-child(2), td:nth-child(2) { width: 320px; }     /* Day Range - wider */
-th:nth-child(3), td:nth-child(3) { width: 150px; }     /* Status - wider */
-th:nth-child(4), td:nth-child(4) { width: 90px; }      /* Server Time - narrower */
+th:nth-child(1), td:nth-child(1) { width: 40px; }       /* Day - narrower */
+th:nth-child(2), td:nth-child(2) { width: 350px; }      /* Day Range - wider */
+th:nth-child(3), td:nth-child(3) { width: 180px; }      /* Status - wider */
+th:nth-child(4), td:nth-child(4) { width: 80px; }       /* Server Time - narrower */
 
 .total-days { width: 50px; background: #fff3b0; font-weight: bold; text-align: center; }
 .claimed { background: #c8f7c5; color: #155724; font-weight: bold; }
 .missed { background: #f8d0d0; color: #8b0000; font-weight: bold; }
 
+/* Colored headers */
+.header-title { font-size: 16px; text-align: center; }
+.header-title.sub7 { background: #cce5ff; }    /* light blue */
+.header-title.sub30 { background: #d4edda; }   /* light green */
+.header-title.sub90 { background: #fff3cd; }   /* light yellow */
+
+/* Summary styling */
 .summary-title { font-weight: bold; margin-bottom: 10px; }
 .summary-item { margin-bottom: 6px; padding: 4px 6px; border-radius: 4px; color: #000; font-weight: bold; }
-.summary-sub7 { background: #cce5ff; }
-.summary-sub30 { background: #d4edda; }
+.summary-sub7 { background: #cce5ff; }   
+.summary-sub30 { background: #d4edda; }  
 .summary-sub90 { background: #fff3cd; }
 </style>
 </head>
@@ -69,15 +48,13 @@ th:nth-child(4), td:nth-child(4) { width: 90px; }      /* Server Time - narrower
 
 <div class="container">
   <div class="left-box">
-    <div class="left-content">
-      <label>Purchase Data (compressed, 7-column, tab- or space-separated):</label>
-      <textarea id="purchaseData" class="purchase"></textarea>
+    <label>Purchase Data (compressed, 7-column, tab-separated):</label>
+    <textarea id="purchaseData" class="purchase"></textarea>
 
-      <label>Claim Data (3-line per claim):</label>
-      <textarea id="claimData" class="claim"></textarea>
+    <label>Claim Data (3-line per claim):</label>
+    <textarea id="claimData" class="claim"></textarea>
 
-      <button onclick="analyze()">Analyze</button>
-    </div>
+    <button onclick="analyze()">Analyze</button>
   </div>
 
   <div class="right-box" id="summaryBox">
@@ -89,6 +66,7 @@ th:nth-child(4), td:nth-child(4) { width: 90px; }      /* Server Time - narrower
 <div id="results" class="tables-container"></div>
 
 <script>
+// ------------------ Constants ------------------
 const PACKS = {
   7.00: {name: "Sub Pack 07", sc: 0.50, gc: 2000},
   30.00: {name: "Sub Pack 30", sc: 2.00, gc: 10000},
@@ -103,7 +81,7 @@ function parsePurchases(text){
     if(lines[i].toLowerCase().includes("sub_pack")){
       const prev = i>0 ? lines[i-1] : null;
       if(!prev) continue;
-      const ts = new Date(prev.split(/\s+/)[0]); // support tabs or spaces
+      const ts = new Date(prev.split(/\s+/)[0]);
       const nextLine = (i+1)<lines.length ? lines[i+1] : lines[i];
       const amtMatch = nextLine.match(/\d+(\.\d+)?/);
       if(!amtMatch) continue;
@@ -178,6 +156,16 @@ function createTable(interval, totalDays, claims){
 
   const table=document.createElement("table");
 
+  // Header row
+  let row1 = table.insertRow();
+  let c1 = row1.insertCell();
+  c1.colSpan = 4;
+  c1.className = "header-title";
+  if(interval.pack_amount === 7) c1.classList.add("sub7");
+  else if(interval.pack_amount === 30) c1.classList.add("sub30");
+  else if(interval.pack_amount === 90) c1.classList.add("sub90");
+  c1.innerText = interval.pack_name;
+
   // Total days row
   let row2 = table.insertRow();
   let c2a = row2.insertCell();
@@ -188,13 +176,12 @@ function createTable(interval, totalDays, claims){
   const lastRange = computeDayRanges(interval.purchase_ts, totalDays);
   c2b.innerText = `Start: ${formatDate(lastRange[0].start)} | End: ${formatDate(lastRange[lastRange.length-1].end)}`;
 
-  // Table headers
+  // Column headers
   let row3=table.insertRow();
   ["Day","Day Range","Status","Server Time"].forEach(h=>{
     let th=document.createElement("th"); th.innerText=h; row3.appendChild(th);
   });
 
-  // Day rows
   lastRange.forEach(r=>{
     let row=table.insertRow();
     row.insertCell().innerText="Day "+r.day;
@@ -257,46 +244,37 @@ function analyze(){
 
   updateSummary(purchases);
 
-  // Create columns for each pack type with colored headers
-  const columns = {};
   for(let amt in PACKS){
-    const colDiv = document.createElement("div");
-    colDiv.className="pack-column";
+    const packName = PACKS[amt].name;
+    let packPurchases = purchases.filter(p=>p.pack_amount===parseFloat(amt)).sort((a,b)=>a.purchase_ts-b.purchase_ts);
 
-    const header = document.createElement("div");
-    header.className="pack-header";
-    header.innerText = PACKS[amt].name;
-    if(parseFloat(amt)===7) header.style.background="#cce5ff";    // light blue
-    else if(parseFloat(amt)===30) header.style.background="#d4edda"; // light green
-    else if(parseFloat(amt)===90) header.style.background="#fff3cd"; // light yellow
-    colDiv.appendChild(header);
-
-    resultsDiv.appendChild(colDiv);
-    columns[amt]=colDiv;
-  }
-
-  // Loop through purchases per pack
-  for(let amt in PACKS){
-    let packPurchases = purchases
-      .filter(p=>p.pack_amount===parseFloat(amt))
-      .sort((a,b)=>a.purchase_ts-b.purchase_ts);
-
-    let intervals=[];
-
+    let intervals = [];
     for(let p of packPurchases){
       const last = intervals[intervals.length-1];
       if(last){
-        const lastEnd = new Date(last.purchase_ts.getTime() + (last.totalDays||7)*24*3600*1000);
+        const lastEnd = new Date(last.purchase_ts.getTime() + 7*24*3600*1000);
         if(p.purchase_ts <= lastEnd){
-          // extend existing interval
           last.totalDays = ((lastEnd.getTime() + 7*24*3600*1000) - last.purchase_ts.getTime())/(24*3600*1000);
           continue;
         } else {
-          intervals.push({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays:7});
+          intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays: 7});
         }
       } else {
-        intervals.push({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays:7});
+        intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays: 7});
       }
     }
 
-    intervals.forEach(in
+    intervals.forEach(interval=>{
+      resultsDiv.appendChild(createTable(interval, interval.totalDays, claims));
+    });
+
+    if(packPurchases.length===0){
+      const emptyInterval = {pack_name: packName, pack_amount:parseFloat(amt), purchase_ts:new Date(), totalDays:0};
+      resultsDiv.appendChild(createTable(emptyInterval, 0, claims));
+    }
+  }
+}
+</script>
+
+</body>
+</html>
