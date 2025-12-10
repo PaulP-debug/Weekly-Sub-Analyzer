@@ -11,27 +11,28 @@ button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
 .left-box { flex: 1; }
 .right-box { flex: 1; border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; background: #f9f9f9; }
 textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
-.tables-container { display: flex; gap: 20px; flex-wrap: wrap; }
 
-.table-box { display: inline-block; vertical-align: top; }
-table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; margin-bottom: 20px; }
+.pack-container { display: block; margin-bottom: 20px; }
+.pack-tables { display: block; margin-top: 5px; }
+
+.table-box { display: block; margin-bottom: 10px; }
+table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; }
 th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 th { background: #f0f0f0; font-weight: bold; }
 .header-title { font-size: 16px; text-align: center; }
-.header-title.sub7 { background: #cce5ff; }    /* light blue */
-.header-title.sub30 { background: #d4edda; }   /* light green */
-.header-title.sub90 { background: #fff3cd; }   /* light yellow */
+.header-title.sub7 { background: #cce5ff; }
+.header-title.sub30 { background: #d4edda; }
+.header-title.sub90 { background: #fff3cd; }
 
-.total-days { background: #fff3b0; font-weight: bold; text-align: center; } /* yellow highlight */
+.total-days { background: #fff3b0; font-weight: bold; text-align: center; }
 .claimed { background: #c8f7c5; color: #155724; font-weight: bold; }
 .missed { background: #f8d0d0; color: #8b0000; font-weight: bold; }
 
-/* Summary styling */
 .summary-title { font-weight: bold; margin-bottom: 10px; }
 .summary-item { margin-bottom: 6px; padding: 4px 6px; border-radius: 4px; color: #000; font-weight: bold; }
-.summary-sub7 { background: #cce5ff; }   /* light blue */
-.summary-sub30 { background: #d4edda; }  /* light green */
-.summary-sub90 { background: #fff3cd; }  /* light yellow */
+.summary-sub7 { background: #cce5ff; }
+.summary-sub30 { background: #d4edda; }
+.summary-sub90 { background: #fff3cd; }
 </style>
 </head>
 <body>
@@ -55,7 +56,7 @@ th { background: #f0f0f0; font-weight: bold; }
   </div>
 </div>
 
-<div id="results" class="tables-container"></div>
+<div id="results"></div>
 
 <script>
 const PACKS = {
@@ -109,7 +110,7 @@ function parseClaims(text){
   return claims;
 }
 
-// ------------------ Date Formatting ------------------
+// ------------------ Format Dates ------------------
 function formatDate(date){
   const pad = n=>n.toString().padStart(2,"0");
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -235,6 +236,18 @@ function analyze() {
     for (let amt in PACKS) {
         const packName = PACKS[amt].name;
 
+        // Create container for this pack type
+        const packContainer = document.createElement("div");
+        packContainer.className = "pack-container";
+
+        let packHeader = document.createElement("h3");
+        packHeader.innerText = packName;
+        packContainer.appendChild(packHeader);
+
+        const packTablesDiv = document.createElement("div");
+        packTablesDiv.className = "pack-tables";
+        packContainer.appendChild(packTablesDiv);
+
         let packPurchases = purchases
             .filter(p => p.pack_amount === parseFloat(amt))
             .sort((a, b) => a.purchase_ts - b.purchase_ts);
@@ -243,41 +256,25 @@ function analyze() {
 
         for (let p of packPurchases) {
             const last = intervals[intervals.length - 1];
-
             if (last) {
-                const lastEnd = new Date(last.purchase_ts.getTime() + 7 * 24 * 3600 * 1000);
-
-                if (p.purchase_ts <= lastEnd) {
-                    // overlapping, skip
-                    continue;
-                } else {
-                    intervals.push({
-                        pack_name: packName,
-                        pack_amount: parseFloat(amt),
-                        purchase_ts: p.purchase_ts
-                    });
-                }
+                const lastEnd = new Date(last.purchase_ts.getTime() + 7*24*3600*1000);
+                if (p.purchase_ts <= lastEnd) continue;
+                else intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts});
             } else {
-                intervals.push({
-                    pack_name: packName,
-                    pack_amount: parseFloat(amt),
-                    purchase_ts: p.purchase_ts
-                });
+                intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts});
             }
         }
 
         intervals.forEach(interval => {
-            resultsDiv.appendChild(createTable(interval, 7, claims));
+            packTablesDiv.appendChild(createTable(interval, 7, claims));
         });
 
-        if (packPurchases.length === 0) {
-            const emptyInterval = {
-                pack_name: packName,
-                pack_amount: parseFloat(amt),
-                purchase_ts: new Date()
-            };
-            resultsDiv.appendChild(createTable(emptyInterval, 0, claims));
+        if(packPurchases.length === 0){
+            const emptyInterval = {pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: new Date()};
+            packTablesDiv.appendChild(createTable(emptyInterval, 0, claims));
         }
+
+        resultsDiv.appendChild(packContainer);
     }
 }
 </script>
