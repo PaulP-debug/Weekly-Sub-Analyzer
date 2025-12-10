@@ -12,11 +12,15 @@ button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
 .right-box { flex: 1; border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; background: #f9f9f9; }
 textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
 
-.pack-container { display: block; margin-bottom: 20px; }
-.pack-tables { display: block; margin-top: 5px; }
+/* Columns for each Sub Pack */
+.tables-container { display: flex; gap: 20px; align-items: flex-start; }
+.pack-column { flex: 1; display: flex; flex-direction: column; }
 
+.pack-header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-align: center; }
+
+/* Tables inside each column stack vertically */
 .table-box { display: block; margin-bottom: 10px; }
-table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; }
+table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; width: 100%; }
 th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 th { background: #f0f0f0; font-weight: bold; }
 .header-title { font-size: 16px; text-align: center; }
@@ -56,7 +60,7 @@ th { background: #f0f0f0; font-weight: bold; }
   </div>
 </div>
 
-<div id="results"></div>
+<div id="results" class="tables-container"></div>
 
 <script>
 const PACKS = {
@@ -224,58 +228,60 @@ function updateSummary(purchases){
   }
 }
 
-// ------------------ Analyze ------------------
-function analyze() {
-    const purchases = parsePurchases(document.getElementById("purchaseData").value);
-    const claims = parseClaims(document.getElementById("claimData").value);
-    const resultsDiv = document.getElementById("results");
-    resultsDiv.innerHTML = "";
+// ------------------ Main Analyze ------------------
+function analyze(){
+  const purchases=parsePurchases(document.getElementById("purchaseData").value);
+  const claims=parseClaims(document.getElementById("claimData").value);
+  const resultsDiv=document.getElementById("results");
+  resultsDiv.innerHTML="";
 
-    updateSummary(purchases);
+  updateSummary(purchases);
 
-    for (let amt in PACKS) {
-        const packName = PACKS[amt].name;
+  // Create columns for each pack type
+  const columns = {};
+  for(let amt in PACKS){
+    const colDiv = document.createElement("div");
+    colDiv.className="pack-column";
+    const header = document.createElement("div");
+    header.className="pack-header";
+    header.innerText=PACKS[amt].name;
+    colDiv.appendChild(header);
+    resultsDiv.appendChild(colDiv);
+    columns[amt]=colDiv;
+  }
 
-        // Create container for this pack type
-        const packContainer = document.createElement("div");
-        packContainer.className = "pack-container";
+  // Loop through purchases per pack
+  for(let amt in PACKS){
+    let packPurchases = purchases
+      .filter(p=>p.pack_amount===parseFloat(amt))
+      .sort((a,b)=>a.purchase_ts-b.purchase_ts);
 
-        let packHeader = document.createElement("h3");
-        packHeader.innerText = packName;
-        packContainer.appendChild(packHeader);
+    let intervals=[];
 
-        const packTablesDiv = document.createElement("div");
-        packTablesDiv.className = "pack-tables";
-        packContainer.appendChild(packTablesDiv);
-
-        let packPurchases = purchases
-            .filter(p => p.pack_amount === parseFloat(amt))
-            .sort((a, b) => a.purchase_ts - b.purchase_ts);
-
-        let intervals = [];
-
-        for (let p of packPurchases) {
-            const last = intervals[intervals.length - 1];
-            if (last) {
-                const lastEnd = new Date(last.purchase_ts.getTime() + 7*24*3600*1000);
-                if (p.purchase_ts <= lastEnd) continue;
-                else intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts});
-            } else {
-                intervals.push({pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts});
-            }
+    for(let p of packPurchases){
+      const last = intervals[intervals.length-1];
+      if(last){
+        const lastEnd = new Date(last.purchase_ts.getTime() + (last.totalDays||7)*24*3600*1000);
+        if(p.purchase_ts <= lastEnd){
+          // extend existing interval
+          last.totalDays = ((lastEnd.getTime() + 7*24*3600*1000) - last.purchase_ts.getTime())/(24*3600*1000);
+          continue;
+        } else {
+          intervals.push({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays:7});
         }
-
-        intervals.forEach(interval => {
-            packTablesDiv.appendChild(createTable(interval, 7, claims));
-        });
-
-        if(packPurchases.length === 0){
-            const emptyInterval = {pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: new Date()};
-            packTablesDiv.appendChild(createTable(emptyInterval, 0, claims));
-        }
-
-        resultsDiv.appendChild(packContainer);
+      } else {
+        intervals.push({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts, totalDays:7});
+      }
     }
+
+    intervals.forEach(interval=>{
+      columns[amt].appendChild(createTable(interval, interval.totalDays, claims));
+    });
+
+    if(packPurchases.length===0){
+      columns[amt].appendChild(createTable({pack_name: PACKS[amt].name, pack_amount: parseFloat(amt), purchase_ts:new Date(), totalDays:0},0,claims));
+    }
+  }
 }
 </script>
 
