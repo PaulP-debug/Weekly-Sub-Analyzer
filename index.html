@@ -23,10 +23,6 @@ textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
 table { border-collapse: collapse; table-layout: fixed; white-space: nowrap; font-size: 14px; width: 100%; }
 th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 th { background: #f0f0f0; font-weight: bold; }
-.header-title { font-size: 16px; text-align: center; }
-.header-title.sub7 { background: #cce5ff; }
-.header-title.sub30 { background: #d4edda; }
-.header-title.sub90 { background: #fff3cd; }
 
 .total-days { background: #fff3b0; font-weight: bold; text-align: center; }
 .claimed { background: #c8f7c5; color: #155724; font-weight: bold; }
@@ -152,15 +148,7 @@ function createTable(interval, totalDays, claims){
 
   const table=document.createElement("table");
 
-  let row1 = table.insertRow();
-  let c1 = row1.insertCell();
-  c1.colSpan = 4;
-  c1.className = "header-title";
-  if(interval.pack_amount === 7) c1.classList.add("sub7");
-  else if(interval.pack_amount === 30) c1.classList.add("sub30");
-  else if(interval.pack_amount === 90) c1.classList.add("sub90");
-  c1.innerText = interval.pack_name;
-
+  // Total days row
   let row2 = table.insertRow();
   let c2a = row2.insertCell();
   c2a.innerText = `Total: ${totalDays} days`;
@@ -170,11 +158,13 @@ function createTable(interval, totalDays, claims){
   const lastRange = computeDayRanges(interval.purchase_ts, totalDays);
   c2b.innerText = `Start: ${formatDate(lastRange[0].start)} | End: ${formatDate(lastRange[lastRange.length-1].end)}`;
 
+  // Table headers
   let row3=table.insertRow();
   ["Day","Day Range","Status","Server Time"].forEach(h=>{
     let th=document.createElement("th"); th.innerText=h; row3.appendChild(th);
   });
 
+  // Day rows
   lastRange.forEach(r=>{
     let row=table.insertRow();
     row.insertCell().innerText="Day "+r.day;
