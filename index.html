@@ -7,9 +7,31 @@
 body { font-family: Arial, sans-serif; padding: 20px; }
 textarea { width: 100%; font-family: monospace; margin-bottom: 10px; }
 button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
-.container { display: flex; gap: 20px; }
-.left-box { flex: 1; }
-.right-box { flex: 1; border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto; background: #f9f9f9; }
+
+.container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start; /* top alignment */
+}
+
+.left-box, .right-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.left-box .left-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.right-box {
+  border: 1px solid #ccc;
+  padding: 10px;
+  background: #f9f9f9;
+  justify-content: flex-start; /* aligns content to top */
+}
+
 textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
 
 /* Columns for each Sub Pack */
@@ -42,13 +64,15 @@ th { background: #f0f0f0; font-weight: bold; }
 
 <div class="container">
   <div class="left-box">
-    <label>Purchase Data (compressed, 7-column, tab-separated):</label>
-    <textarea id="purchaseData" class="purchase"></textarea>
+    <div class="left-content">
+      <label>Purchase Data (compressed, 7-column, tab-separated):</label>
+      <textarea id="purchaseData" class="purchase"></textarea>
 
-    <label>Claim Data (3-line per claim):</label>
-    <textarea id="claimData" class="claim"></textarea>
+      <label>Claim Data (3-line per claim):</label>
+      <textarea id="claimData" class="claim"></textarea>
 
-    <button onclick="analyze()">Analyze</button>
+      <button onclick="analyze()">Analyze</button>
+    </div>
   </div>
 
   <div class="right-box" id="summaryBox">
