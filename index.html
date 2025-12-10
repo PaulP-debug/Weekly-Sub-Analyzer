@@ -11,7 +11,7 @@ button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
 .container {
   display: flex;
   gap: 20px;
-  align-items: flex-start; /* top alignment */
+  align-items: flex-start;
 }
 
 .left-box, .right-box {
@@ -29,7 +29,7 @@ button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
   border: 1px solid #ccc;
   padding: 10px;
   background: #f9f9f9;
-  justify-content: flex-start; /* aligns content to top */
+  justify-content: flex-start;
 }
 
 textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
@@ -65,7 +65,7 @@ th { background: #f0f0f0; font-weight: bold; }
 <div class="container">
   <div class="left-box">
     <div class="left-content">
-      <label>Purchase Data (compressed, 7-column, tab-separated):</label>
+      <label>Purchase Data (compressed, 7-column, tab- or space-separated):</label>
       <textarea id="purchaseData" class="purchase"></textarea>
 
       <label>Claim Data (3-line per claim):</label>
@@ -98,7 +98,8 @@ function parsePurchases(text){
     if(lines[i].toLowerCase().includes("sub_pack")){
       const prev = i>0 ? lines[i-1] : null;
       if(!prev) continue;
-      const ts = new Date(prev.split("\t")[0]);
+      // Flexible split: works for tabs or multiple spaces
+      const ts = new Date(prev.split(/\s+/)[0]);
       const nextLine = (i+1)<lines.length ? lines[i+1] : lines[i];
       const amtMatch = nextLine.match(/\d+(\.\d+)?/);
       if(!amtMatch) continue;
