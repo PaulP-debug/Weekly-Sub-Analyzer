@@ -1,132 +1,48 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Weekly Subscription Analyzer</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 20px; }
-  h2 { margin-top: 30px; }
-  textarea { width: 100%; height: 120px; font-family: monospace; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; text-align: center; }
-  .bronze { background: #cd7f32; color: white; }
-  .silver { background: #c0c0c0; color: black; }
-  .gold { background: #ffd700; color: black; }
-  .grid { display: flex; flex-wrap: wrap; margin-top: 10px; }
-  .day { border: 1px solid #ccc; padding: 4px; width: 100px; height: 70px; font-size: 12px; margin: 2px; }
-  .claimed { background: #c6efce; }
-  .missed { background: #ffc7ce; }
-  .future { background: #d9d9d9; }
-</style>
-</head>
-<body>
-<h1>Weekly Subscription Analyzer</h1>
+function analyze() {
+    const purchases = parsePurchases(document.getElementById("purchaseData").value);
+    const claims = parseClaims(document.getElementById("claimData").value);
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.innerHTML = "";
 
-<h2>Purchases Data</h2>
-<textarea id="box1" placeholder="Paste Purchases Data here..."></textarea>
+    // Update summary
+    updateSummary(purchases);
 
-<h2>Game Flow Data</h2>
-<textarea id="box2" placeholder="Paste Game Flow Data here..."></textarea>
+    // Loop through each pack type
+    for (let amt in PACKS) {
+        const packName = PACKS[amt].name;
+        let packPurchases = purchases
+            .filter(p => p.pack_amount === parseFloat(amt))
+            .sort((a, b) => a.purchase_ts - b.purchase_ts);
 
-<button onclick="analyze()" style="padding:10px 25px; margin-top:20px; font-size:16px;">Analyze Subscription</button>
+        let intervals = [];
 
-<h2>Valid Subscriptions</h2>
-<div id="validSubs"></div>
+        for (let p of packPurchases) {
+            const last = intervals[intervals.length - 1];
 
-<h2>Analyzed Subscription Grid</h2>
-<div id="results"></div>
+            if (last) {
+                const lastEnd = new Date(last.purchase_ts.getTime() + 7 * 24 * 3600 * 1000); // 7 days
+                if (p.purchase_ts <= lastEnd) {
+                    // Overlaps with previous interval, merge: extend last interval if needed
+                    continue; // still only one interval for overlapping purchases
+                } else {
+                    // Non-overlapping: create new interval
+                    intervals.push({ pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts });
+                }
+            } else {
+                // First purchase
+                intervals.push({ pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: p.purchase_ts });
+            }
+        }
 
-<script>
-function parseTS(x){
-  let dt = new Date(x.replace(/\s+/,'T'));
-  // Adjust for 08:00 reset
-  if(dt.getHours() < 8) dt.setDate(dt.getDate()-1);
-  return dt;
+        // Create table for each interval
+        intervals.forEach(interval => {
+            resultsDiv.appendChild(createTable(interval, 7, claims)); // totalDays = 7 for each purchase
+        });
+
+        // Handle case where there are no purchases for this pack
+        if (packPurchases.length === 0) {
+            const emptyInterval = { pack_name: packName, pack_amount: parseFloat(amt), purchase_ts: new Date() };
+            resultsDiv.appendChild(createTable(emptyInterval, 0, claims));
+        }
+    }
 }
-
-function analyze(){
-  const b1 = document.getElementById('box1').value.trim().split(/\n/);
-  const b2 = document.getElementById('box2').value.trim().split(/\n/);
-
-  // --- Parse Purchases ---
-  let subs=[];
-  for(let i=0; i<b1.length; i+=4){
-    let status = b1[i].trim();
-    let updated = b1[i+1]?.trim();
-    let type = b1[i+2]?.trim();
-    let amt = parseFloat(b1[i+3]);
-    if(status!=='Succeed' || !['sub_pack','start_pack','first'].includes(type)) continue;
-    let tier = amt===7? 'Bronze': amt===33? 'Silver': amt===90? 'Gold': 'Bronze';
-    let start = parseTS(updated.split('\t')[0]);
-    let end = new Date(start.getTime() + 7*24*3600*1000); // 7 days subscription
-    subs.push({tier,start,end, amt});
-  }
-
-  // Extend subscriptions if purchased again
-  subs.sort((a,b)=>a.start-b.start);
-  for(let i=1;i<subs.length;i++){
-    if(subs[i].tier===subs[i-1].tier && subs[i].start<=subs[i-1].end){
-      subs[i-1].end = new Date(subs[i-1].end.getTime() + 7*24*3600*1000);
-    }
-  }
-
-  // Show valid subscriptions
-  let validHTML = '<table><tr><th>Tier</th><th>Amount</th><th>Purchase Date</th><th>End Date</th></tr>';
-  subs.forEach(s=>{
-    validHTML += `<tr>
-      <td>${s.tier}</td>
-      <td>${s.amt}</td>
-      <td>${s.start.toISOString().replace('T',' ').substr(0,19)}</td>
-      <td>${s.end.toISOString().replace('T',' ').substr(0,19)}</td>
-    </tr>`;
-  });
-  validHTML += '</table>';
-  document.getElementById('validSubs').innerHTML = validHTML;
-
-  // --- Parse Game Flow ---
-  let claims=[];
-  for(let i=0;i<b2.length;i+=3){
-    let line1 = b2[i].split(/\t+/);
-    let type = b2[i+1]?.trim();
-    let ts = b2[i+2]?.trim();
-    let tier=null;
-    if(type==='Weekly Subscription'){
-      let unplayed = parseFloat(line1[0]);
-      let gc = parseFloat(line1[1]);
-      if(unplayed===0.5 && gc===2000) tier='Bronze';
-      if(unplayed===2 && gc===10000) tier='Silver';
-      if(unplayed===5.5 && gc===40000) tier='Gold';
-    }
-    if(tier) claims.push({tier, ts: parseTS(ts)});
-  }
-
-  // --- Build Analyzed Grid ---
-  let html='';
-  subs.forEach(s=>{
-    const color = s.tier==='Bronze'?'bronze':s.tier==='Silver'?'silver':'gold';
-    html += `<h3 class="${color}">${s.tier} Subscription (${s.start.toISOString().replace('T',' ').substr(0,19)} → ${s.end.toISOString().replace('T',' ').substr(0,19)})</h3>`;
-    let days=[];
-    let current = new Date(s.start.getTime());
-    let dayNum = 1;
-    while(current < s.end){
-      let dayStart = new Date(current.getTime());
-      if(dayNum>1) dayStart.setHours(8,0,0,0);
-      let dayEnd = new Date(dayStart.getTime() + 24*3600*1000);
-      let claim = claims.find(c=>c.tier===s.tier && c.ts>=dayStart && c.ts<dayEnd);
-      let today = new Date();
-      let cls = claim?'claimed':(dayEnd>today?'future':'missed');
-      days.push(`<div class="day ${cls}"><b>Day ${dayNum}</b><br>${dayStart.toISOString().replace('T',' ').substr(0,16)}<br>${claim?'Claimed':''}${cls==='future'?'<br>Future':''}${cls==='missed'?'<br>Not Claimed':''}</div>`);
-      current = new Date(dayEnd.getTime());
-      dayNum++;
-    }
-    html += `<div class="grid">${days.join('')}</div>`;
-  });
-
-  document.getElementById('results').innerHTML = html;
-}
-</script>
-
-<p style="margin-top:40px; font-size:12px;">Signature by: Paul P</p>
-</body>
-</html>
