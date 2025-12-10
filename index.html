@@ -16,7 +16,8 @@ textarea.purchase, textarea.claim { height: 80px; resize: vertical; }
 .tables-container { display: flex; gap: 20px; align-items: flex-start; }
 .pack-column { flex: 1; display: flex; flex-direction: column; }
 
-.pack-header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-align: center; }
+/* Colored Sub Pack headers */
+.pack-header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-align: center; padding: 6px; border-radius: 4px; }
 
 /* Tables inside each column stack vertically */
 .table-box { display: block; margin-bottom: 10px; }
@@ -227,15 +228,20 @@ function analyze(){
 
   updateSummary(purchases);
 
-  // Create columns for each pack type
+  // Create columns for each pack type with colored headers
   const columns = {};
   for(let amt in PACKS){
     const colDiv = document.createElement("div");
     colDiv.className="pack-column";
+
     const header = document.createElement("div");
     header.className="pack-header";
-    header.innerText=PACKS[amt].name;
+    header.innerText = PACKS[amt].name;
+    if(parseFloat(amt)===7) header.style.background="#cce5ff";    // light blue
+    else if(parseFloat(amt)===30) header.style.background="#d4edda"; // light green
+    else if(parseFloat(amt)===90) header.style.background="#fff3cd"; // light yellow
     colDiv.appendChild(header);
+
     resultsDiv.appendChild(colDiv);
     columns[amt]=colDiv;
   }
